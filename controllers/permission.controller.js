@@ -1,0 +1,420 @@
+/**
+ * @module controllers/permission
+ * @description Controller for handling permission management operations
+ */
+const permissionService = require("../services/permission.service");
+const logger = require("../services/logger.service");
+const { NotFoundError, ConflictResourceError, ForbiddenError } = require("../utils/errors");
+
+/**
+ * Get all permissions with optional filtering
+ * @async
+ * @function getAllPermissions
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with permissions
+ */
+const getAllPermissions = async (req, res, next) => {
+  try {
+    const { resource, search } = req.query;
+    const permissions = await permissionService.getAllPermissions({ resource, search });
+    return res.json({ permissions });
+  } catch (error) {
+    logger.error("Error in getAllPermissions controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Get a permission by ID
+ * @async
+ * @function getPermissionById
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with permission
+ */
+const getPermissionById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const permission = await permissionService.getPermissionById(parseInt(id));
+
+    if (!permission) {
+      throw new NotFoundError(`Permission with ID ${id} not found`);
+    }
+
+    return res.json({ permission });
+  } catch (error) {
+    logger.error("Error in getPermissionById controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Create a new permission
+ * @async
+ * @function createPermission
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with created permission
+ */
+const createPermission = async (req, res, next) => {
+  try {
+    const { resource, action, description } = req.body;
+
+    const permission = await permissionService.createPermission({
+      resource,
+      action,
+      description,
+    });
+
+    return res.status(201).json({
+      message: "Permission created successfully",
+      permission,
+    });
+  } catch (error) {
+    if (error.message.includes("already exists")) {
+      return next(new ConflictResourceError(error.message));
+    }
+    logger.error("Error in createPermission controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Update a permission
+ * @async
+ * @function updatePermission
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with updated permission
+ */
+const updatePermission = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { resource, action, description } = req.body;
+
+    const permission = await permissionService.updatePermission(parseInt(id), {
+      resource,
+      action,
+      description,
+    });
+
+    if (!permission) {
+      throw new NotFoundError(`Permission with ID ${id} not found`);
+    }
+
+    return res.json({
+      message: "Permission updated successfully",
+      permission,
+    });
+  } catch (error) {
+    if (error.message.includes("already exists")) {
+      return next(new ConflictResourceError(error.message));
+    }
+    logger.error("Error in updatePermission controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Delete a permission
+ * @async
+ * @function deletePermission
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response
+ */
+const deletePermission = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    try {
+      const deleted = await permissionService.deletePermission(parseInt(id));
+
+      if (!deleted) {
+        throw new NotFoundError(`Permission with ID ${id} not found`);
+      }
+
+      return res.json({
+        message: "Permission deleted successfully",
+      });
+    } catch (error) {
+      if (error.message.includes("assigned to")) {
+        throw new ForbiddenError(error.message);
+      }
+      throw error;
+    }
+  } catch (error) {
+    logger.error("Error in deletePermission controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Get all roles with their permissions
+ * @async
+ * @function getRolesWithPermissions
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with roles and permissions
+ */
+const getRolesWithPermissions = async (req, res, next) => {
+  try {
+    const roles = await permissionService.getRolesWithPermissions();
+    return res.json({ roles });
+  } catch (error) {
+    logger.error("Error in getRolesWithPermissions controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Get a role with its permissions
+ * @async
+ * @function getRoleWithPermissions
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with role and permissions
+ */
+const getRoleWithPermissions = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const role = await permissionService.getRoleWithPermissions(parseInt(id));
+
+    if (!role) {
+      throw new NotFoundError(`Role with ID ${id} not found`);
+    }
+
+    return res.json({ role });
+  } catch (error) {
+    logger.error("Error in getRoleWithPermissions controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Create a new role
+ * @async
+ * @function createRole
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with created role
+ */
+const createRole = async (req, res, next) => {
+  try {
+    const { name, description, permissionIds } = req.body;
+
+    const role = await permissionService.createRole({
+      name,
+      description,
+      permissionIds,
+    });
+
+    return res.status(201).json({
+      message: "Role created successfully",
+      role,
+    });
+  } catch (error) {
+    if (error.message.includes("already exists")) {
+      return next(new ConflictResourceError(error.message));
+    }
+    logger.error("Error in createRole controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Update a role
+ * @async
+ * @function updateRole
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with updated role
+ */
+const updateRole = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+
+    const role = await permissionService.updateRole(parseInt(id), {
+      name,
+      description,
+    });
+
+    if (!role) {
+      throw new NotFoundError(`Role with ID ${id} not found`);
+    }
+
+    return res.json({
+      message: "Role updated successfully",
+      role,
+    });
+  } catch (error) {
+    if (error.message.includes("already exists")) {
+      return next(new ConflictResourceError(error.message));
+    }
+    logger.error("Error in updateRole controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Delete a role
+ * @async
+ * @function deleteRole
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response
+ */
+const deleteRole = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    try {
+      const deleted = await permissionService.deleteRole(parseInt(id));
+
+      if (!deleted) {
+        throw new NotFoundError(`Role with ID ${id} not found`);
+      }
+
+      return res.json({
+        message: "Role deleted successfully",
+      });
+    } catch (error) {
+      if (error.message.includes("assigned to")) {
+        throw new ForbiddenError(error.message);
+      }
+      throw error;
+    }
+  } catch (error) {
+    logger.error("Error in deleteRole controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Assign a permission to a role
+ * @async
+ * @function assignPermissionToRole
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response
+ */
+const assignPermissionToRole = async (req, res, next) => {
+  try {
+    const { roleId } = req.params;
+    const { permissionId } = req.body;
+
+    const result = await permissionService.assignPermissionToRole(parseInt(roleId), permissionId);
+
+    if (result.already_assigned) {
+      return res.json({
+        message: "Permission is already assigned to this role",
+        role_id: result.role_id,
+        permission_id: result.permission_id,
+      });
+    }
+
+    return res.status(201).json({
+      message: "Permission assigned to role successfully",
+      role_id: result.role_id,
+      permission_id: result.permission_id,
+    });
+  } catch (error) {
+    if (error.message.includes("not found")) {
+      return next(new NotFoundError(error.message));
+    }
+    logger.error("Error in assignPermissionToRole controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Remove a permission from a role
+ * @async
+ * @function removePermissionFromRole
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response
+ */
+const removePermissionFromRole = async (req, res, next) => {
+  try {
+    const { roleId, permissionId } = req.params;
+
+    const removed = await permissionService.removePermissionFromRole(parseInt(roleId), parseInt(permissionId));
+
+    if (!removed) {
+      throw new NotFoundError(`Assignment not found for role ID ${roleId} and permission ID ${permissionId}`);
+    }
+
+    return res.json({
+      message: "Permission removed from role successfully",
+      role_id: parseInt(roleId),
+      permission_id: parseInt(permissionId),
+    });
+  } catch (error) {
+    logger.error("Error in removePermissionFromRole controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Update permissions for a role
+ * @async
+ * @function updateRolePermissions
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response
+ */
+const updateRolePermissions = async (req, res, next) => {
+  try {
+    const { roleId } = req.params;
+    const { permissionIds } = req.body;
+
+    const result = await permissionService.updateRolePermissions(parseInt(roleId), permissionIds);
+
+    return res.json({
+      message: "Role permissions updated successfully",
+      role_id: result.role_id,
+      permissions_added: result.permissions_added,
+    });
+  } catch (error) {
+    if (error.message.includes("not found")) {
+      return next(new NotFoundError(error.message));
+    }
+    if (error.message.includes("invalid")) {
+      return next(new ForbiddenError(error.message));
+    }
+    logger.error("Error in updateRolePermissions controller:", { error });
+    return next(error);
+  }
+};
+
+module.exports = {
+  getAllPermissions,
+  getPermissionById,
+  createPermission,
+  updatePermission,
+  deletePermission,
+  getRolesWithPermissions,
+  getRoleWithPermissions,
+  createRole,
+  updateRole,
+  deleteRole,
+  assignPermissionToRole,
+  removePermissionFromRole,
+  updateRolePermissions,
+};

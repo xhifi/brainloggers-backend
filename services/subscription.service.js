@@ -1,0 +1,499 @@
+/**
+ * @module services/subscription
+ * @description Service for managing email subscribers, including subscribe, unsubscribe, and admin operations
+ */
+const db = require("../config/db");
+const logger = require("./logger.service");
+const { parse } = require("csv-parse/sync");
+const csvStringify = require("csv-stringify");
+
+/**
+ * Subscribe a new email to the mailing list
+ * @async
+ * @function subscribe
+ * @param {Object} subscriberData - Data for the new subscriber
+ * @param {string} subscriberData.email - Subscriber's email address
+ * @param {string} subscriberData.name - Subscriber's name
+ * @param {string} [subscriberData.dateOfBirth] - Subscriber's date of birth (optional)
+ * @param {Object} [subscriberData.metadata] - Additional metadata (optional)
+ * @returns {Promise<Object>} The newly created subscriber
+ * @throws {Error} If email is already subscribed or other database error occurs
+ */
+const subscribe = async ({ email, name, dateOfBirth, metadata = {} }) => {
+  try {
+    const sql = `
+      INSERT INTO subscribers (email, name, date_of_birth, metadata, is_active)
+      VALUES ($1, $2, $3, $4, true)
+      RETURNING id, email, name, date_of_birth, metadata, is_active, subscribed_at
+    `;
+
+    const { rows } = await db.query(sql, [email, name || null, dateOfBirth || null, metadata ? JSON.stringify(metadata) : null]);
+
+    return rows[0];
+  } catch (error) {
+    if (error.code === "23505") {
+      // Duplicate key violation
+      throw new Error("Email is already subscribed");
+    }
+    logger.error("Error subscribing email:", { error, email });
+    throw new Error("Failed to subscribe email");
+  }
+};
+
+/**
+ * Unsubscribe an email from the mailing list
+ * @async
+ * @function unsubscribe
+ * @param {string} email - The email address to unsubscribe
+ * @returns {Promise<Object|null>} The updated subscriber or null if not found
+ * @throws {Error} If database error occurs
+ */
+const unsubscribe = async (email) => {
+  try {
+    const sql = `
+      UPDATE subscribers
+      SET is_active = false, unsubscribed_at = NOW(), updated_at = NOW()
+      WHERE email = $1 AND is_active = true
+      RETURNING id, email, name, is_active, unsubscribed_at
+    `;
+
+    const { rows } = await db.query(sql, [email]);
+    return rows[0] || null;
+  } catch (error) {
+    logger.error("Error unsubscribing email:", { error, email });
+    throw new Error("Failed to unsubscribe email");
+  }
+};
+
+/**
+ * Get all subscribers with optional filtering and pagination
+ * @async
+ * @function getSubscribers
+ * @param {Object} options - Query options
+ * @param {number} [options.page=1] - Page number
+ * @param {number} [options.limit=10] - Records per page
+ * @param {string} [options.search] - Search term for email or name
+ * @param {boolean} [options.isActive] - Filter by active status
+ * @param {string} [options.sortBy='id'] - Field to sort by
+ * @param {string} [options.sortOrder='asc'] - Sort order ('asc' or 'desc')
+ * @returns {Promise<Object>} Paginated subscribers with count
+ * @throws {Error} If database error occurs
+ */
+const getSubscribers = async ({ page = 1, limit = 10, search, isActive, sortBy = "id", sortOrder = "asc" }) => {
+  try {
+    const offset = (page - 1) * limit;
+    const params = [];
+    let whereClause = "";
+    let countWhereClause = "";
+
+    // Building WHERE clause
+    const conditions = [];
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(email ILIKE $${params.length} OR name ILIKE $${params.length})`);
+    }
+
+    if (isActive !== undefined) {
+      params.push(isActive);
+      conditions.push(`is_active = $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      whereClause = `WHERE ${conditions.join(" AND ")}`;
+      countWhereClause = whereClause;
+    }
+
+    // Validate sortBy to prevent SQL injection
+    const allowedSortFields = ["id", "email", "name", "subscribed_at", "is_active"];
+    if (!allowedSortFields.includes(sortBy)) {
+      sortBy = "id";
+    }
+
+    // Validate sortOrder
+    if (sortOrder !== "asc" && sortOrder !== "desc") {
+      sortOrder = "asc";
+    }
+
+    // Query for paginated results
+    const sql = `
+      SELECT 
+        id, email, name, date_of_birth, 
+        is_active, subscribed_at, unsubscribed_at, metadata
+      FROM subscribers
+      ${whereClause}
+      ORDER BY ${sortBy} ${sortOrder}
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+
+    params.push(limit, offset);
+
+    // Query for total count
+    const countSql = `
+      SELECT COUNT(*) AS total FROM subscribers
+      ${countWhereClause}
+    `;
+
+    const [resultsQuery, countQuery] = await Promise.all([
+      db.query(sql, params),
+      db.query(countSql, params.slice(0, params.length - 2)), // Remove limit and offset
+    ]);
+
+    const subscribers = resultsQuery.rows;
+    const total = parseInt(countQuery.rows[0].total);
+
+    return {
+      subscribers,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  } catch (error) {
+    logger.error("Error fetching subscribers:", { error });
+    throw new Error("Failed to fetch subscribers");
+  }
+};
+
+/**
+ * Get a subscriber by ID
+ * @async
+ * @function getSubscriberById
+ * @param {number} id - Subscriber ID
+ * @returns {Promise<Object|null>} Subscriber data or null if not found
+ * @throws {Error} If database error occurs
+ */
+const getSubscriberById = async (id) => {
+  try {
+    const sql = `
+      SELECT 
+        id, email, name, date_of_birth, 
+        is_active, subscribed_at, unsubscribed_at, metadata
+      FROM subscribers
+      WHERE id = $1
+    `;
+
+    const { rows } = await db.query(sql, [id]);
+    return rows[0] || null;
+  } catch (error) {
+    logger.error("Error fetching subscriber by ID:", { error, id });
+    throw new Error("Failed to fetch subscriber");
+  }
+};
+
+/**
+ * Get a subscriber by email
+ * @async
+ * @function getSubscriberByEmail
+ * @param {string} email - Subscriber email
+ * @returns {Promise<Object|null>} Subscriber data or null if not found
+ * @throws {Error} If database error occurs
+ */
+const getSubscriberByEmail = async (email) => {
+  try {
+    const sql = `
+      SELECT 
+        id, email, name, date_of_birth, 
+        is_active, subscribed_at, unsubscribed_at, metadata
+      FROM subscribers
+      WHERE email = $1
+    `;
+
+    const { rows } = await db.query(sql, [email]);
+    return rows[0] || null;
+  } catch (error) {
+    logger.error("Error fetching subscriber by email:", { error, email });
+    throw new Error("Failed to fetch subscriber");
+  }
+};
+
+/**
+ * Update a subscriber
+ * @async
+ * @function updateSubscriber
+ * @param {number} id - Subscriber ID
+ * @param {Object} updateData - Data to update
+ * @returns {Promise<Object|null>} Updated subscriber or null if not found
+ * @throws {Error} If database error occurs
+ */
+const updateSubscriber = async (id, updateData) => {
+  try {
+    const allowedFields = ["email", "name", "date_of_birth", "is_active", "metadata"];
+    const updates = [];
+    const values = [];
+
+    // Build dynamic SQL for updates
+    Object.keys(updateData).forEach((key) => {
+      // Convert camelCase to snake_case and check if field is allowed
+      const snakeKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+      if (allowedFields.includes(snakeKey)) {
+        updates.push(`${snakeKey} = $${values.length + 1}`);
+
+        // Handle metadata specially to convert to JSON
+        if (snakeKey === "metadata") {
+          values.push(JSON.stringify(updateData[key]));
+        } else {
+          values.push(updateData[key]);
+        }
+      }
+    });
+
+    if (updates.length === 0) {
+      return await getSubscriberById(id); // No updates to make
+    }
+
+    // Add updated_at timestamp
+    updates.push(`updated_at = NOW()`);
+
+    // If setting to inactive, set unsubscribed_at
+    if (updateData.isActive === false) {
+      updates.push(`unsubscribed_at = NOW()`);
+    }
+
+    // Build final SQL
+    const sql = `
+      UPDATE subscribers
+      SET ${updates.join(", ")}
+      WHERE id = $${values.length + 1}
+      RETURNING id, email, name, date_of_birth, is_active, subscribed_at, unsubscribed_at, metadata
+    `;
+
+    values.push(id);
+
+    const { rows } = await db.query(sql, values);
+    return rows[0] || null;
+  } catch (error) {
+    if (error.code === "23505") {
+      // Duplicate key violation
+      throw new Error("Email is already in use by another subscriber");
+    }
+    logger.error("Error updating subscriber:", { error, id });
+    throw new Error("Failed to update subscriber");
+  }
+};
+
+/**
+ * Delete a subscriber
+ * @async
+ * @function deleteSubscriber
+ * @param {number} id - Subscriber ID
+ * @returns {Promise<boolean>} True if deleted, false if not found
+ * @throws {Error} If database error occurs
+ */
+const deleteSubscriber = async (id) => {
+  try {
+    const sql = `
+      DELETE FROM subscribers
+      WHERE id = $1
+      RETURNING id
+    `;
+
+    const { rowCount } = await db.query(sql, [id]);
+    return rowCount > 0;
+  } catch (error) {
+    logger.error("Error deleting subscriber:", { error, id });
+    throw new Error("Failed to delete subscriber");
+  }
+};
+
+/**
+ * Import subscribers from CSV content
+ * @async
+ * @function importSubscribersFromCSV
+ * @param {string} csvContent - CSV content as string
+ * @returns {Promise<Object>} Results of import operation
+ * @throws {Error} If parsing or database error occurs
+ */
+const importSubscribersFromCSV = async (csvContent) => {
+  try {
+    // Parse CSV content
+    const records = parse(csvContent, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+
+    const results = {
+      total: records.length,
+      added: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    // Process records in batches to avoid overloading the database
+    const batchSize = 100;
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+
+      // Process each record in the current batch
+      const promises = batch.map(async (record, index) => {
+        try {
+          // Map CSV columns to database fields
+          const email = record.email?.toLowerCase();
+          const name = record.name;
+
+          // Build metadata from any additional fields
+          const metadata = {};
+          Object.keys(record).forEach((key) => {
+            if (!["email", "name"].includes(key)) {
+              metadata[key] = record[key];
+            }
+          });
+
+          if (!email || !isValidEmail(email)) {
+            results.errors.push({ row: i + index + 1, email, error: "Invalid or missing email" });
+            results.skipped++;
+            return;
+          }
+
+          if (!name) {
+            results.errors.push({ row: i + index + 1, email, error: "Missing name" });
+            results.skipped++;
+            return;
+          }
+
+          // Check if subscriber already exists
+          const existing = await getSubscriberByEmail(email);
+          if (existing) {
+            results.skipped++;
+            return;
+          }
+
+          // Create new subscriber
+          await subscribe({
+            email,
+            name,
+            metadata,
+          });
+
+          results.added++;
+        } catch (error) {
+          const rowNum = i + index + 1;
+          logger.error(`Error importing row ${rowNum}:`, { error, record });
+          results.errors.push({ row: rowNum, email: record.email, error: error.message });
+          results.skipped++;
+        }
+      });
+
+      await Promise.all(promises);
+    }
+
+    return results;
+  } catch (error) {
+    logger.error("Error in CSV import:", { error });
+    throw new Error("Failed to import subscribers: " + error.message);
+  }
+};
+
+/**
+ * Export subscribers to CSV
+ * @async
+ * @function exportSubscribersToCSV
+ * @param {Object} filters - Filters to apply (same as getSubscribers)
+ * @returns {Promise<string>} CSV content as string
+ * @throws {Error} If database or formatting error occurs
+ */
+const exportSubscribersToCSV = async (filters = {}) => {
+  try {
+    // Remove pagination from filters but keep other filters
+    const { page, limit, ...otherFilters } = filters;
+
+    // Get all subscribers matching filters without pagination
+    const sql = `
+      SELECT 
+        id, email, name, date_of_birth, 
+        is_active, subscribed_at, unsubscribed_at, metadata
+      FROM subscribers
+      ${buildWhereClause(otherFilters)}
+      ORDER BY id ASC
+    `;
+
+    const { rows } = await db.query(sql, buildWhereParams(otherFilters));
+
+    // Format data for CSV
+    const formattedData = rows.map((subscriber) => {
+      const formatted = {
+        id: subscriber.id,
+        email: subscriber.email,
+        name: subscriber.name,
+        date_of_birth: subscriber.date_of_birth,
+        is_active: subscriber.is_active ? "Yes" : "No",
+        subscribed_at: formatDate(subscriber.subscribed_at),
+        unsubscribed_at: subscriber.unsubscribed_at ? formatDate(subscriber.unsubscribed_at) : "",
+      };
+
+      // Add metadata fields if present
+      if (subscriber.metadata) {
+        Object.keys(subscriber.metadata).forEach((key) => {
+          formatted[`metadata_${key}`] = subscriber.metadata[key];
+        });
+      }
+
+      return formatted;
+    });
+
+    // Convert to CSV
+    return new Promise((resolve, reject) => {
+      csvStringify(formattedData, { header: true }, (err, output) => {
+        if (err) reject(new Error("Failed to generate CSV: " + err.message));
+        else resolve(output);
+      });
+    });
+  } catch (error) {
+    logger.error("Error exporting subscribers to CSV:", { error });
+    throw new Error("Failed to export subscribers to CSV");
+  }
+};
+
+// Helper functions
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+function formatDate(date) {
+  if (!date) return "";
+  return new Date(date).toISOString().split("T")[0];
+}
+
+function buildWhereClause({ search, isActive }) {
+  const conditions = [];
+
+  if (search) {
+    conditions.push(`(email ILIKE $1 OR name ILIKE $1)`);
+  }
+
+  if (isActive !== undefined) {
+    const paramIndex = search ? 2 : 1;
+    conditions.push(`is_active = $${paramIndex}`);
+  }
+
+  return conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+}
+
+function buildWhereParams({ search, isActive }) {
+  const params = [];
+
+  if (search) {
+    params.push(`%${search}%`);
+  }
+
+  if (isActive !== undefined) {
+    params.push(isActive);
+  }
+
+  return params;
+}
+
+module.exports = {
+  subscribe,
+  unsubscribe,
+  getSubscribers,
+  getSubscriberById,
+  getSubscriberByEmail,
+  updateSubscriber,
+  deleteSubscriber,
+  importSubscribersFromCSV,
+  exportSubscribersToCSV,
+};

@@ -1,0 +1,728 @@
+/**
+ * @module services/permission
+ * @description Service for managing permissions in the RBAC system
+ */
+const db = require("../config/db");
+const logger = require("./logger.service");
+const roleService = require("./role.service");
+const NodeCache = require("node-cache");
+
+// Cache permission data for 5 minutes
+const permissionCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
+
+/**
+ * Clear all permission-related caches
+ * @function clearPermissionCaches
+ */
+const clearPermissionCaches = () => {
+  permissionCache.flushAll();
+  // Also need to clear the role service caches
+  if (roleService.clearCaches) {
+    roleService.clearCaches();
+  }
+};
+
+/**
+ * Get all permissions with optional filtering
+ * @async
+ * @function getAllPermissions
+ * @param {Object} options - Query options
+ * @param {string} [options.resource] - Filter by resource
+ * @param {string} [options.search] - Search term for resource or action
+ * @returns {Promise<Array>} Array of permission objects
+ */
+const getAllPermissions = async ({ resource, search } = {}) => {
+  try {
+    const params = [];
+    const conditions = [];
+
+    if (resource) {
+      params.push(resource);
+      conditions.push(`resource = $${params.length}`);
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(resource ILIKE $${params.length} OR action ILIKE $${params.length} OR description ILIKE $${params.length})`);
+    }
+
+    let whereClause = "";
+    if (conditions.length > 0) {
+      whereClause = `WHERE ${conditions.join(" AND ")}`;
+    }
+
+    const sql = `
+      SELECT id, resource, action, description, created_at, updated_at 
+      FROM permissions
+      ${whereClause}
+      ORDER BY resource, action
+    `;
+
+    const { rows } = await db.query(sql, params);
+    return rows;
+  } catch (error) {
+    logger.error("Error getting permissions:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get a permission by ID
+ * @async
+ * @function getPermissionById
+ * @param {number} id - Permission ID
+ * @returns {Promise<Object|null>} Permission object or null if not found
+ */
+const getPermissionById = async (id) => {
+  try {
+    const cacheKey = `permission_${id}`;
+    const cachedPermission = permissionCache.get(cacheKey);
+    if (cachedPermission) return cachedPermission;
+
+    const sql = `
+      SELECT id, resource, action, description, created_at, updated_at 
+      FROM permissions 
+      WHERE id = $1
+    `;
+
+    const { rows } = await db.query(sql, [id]);
+
+    if (rows.length === 0) return null;
+
+    // Cache the permission
+    permissionCache.set(cacheKey, rows[0]);
+    return rows[0];
+  } catch (error) {
+    logger.error(`Error getting permission by ID ${id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get a permission by resource and action
+ * @async
+ * @function getPermissionByResourceAction
+ * @param {string} resource - Resource name
+ * @param {string} action - Action name
+ * @returns {Promise<Object|null>} Permission object or null if not found
+ */
+const getPermissionByResourceAction = async (resource, action) => {
+  try {
+    const cacheKey = `permission_${resource}_${action}`;
+    const cachedPermission = permissionCache.get(cacheKey);
+    if (cachedPermission) return cachedPermission;
+
+    const sql = `
+      SELECT id, resource, action, description, created_at, updated_at 
+      FROM permissions 
+      WHERE resource = $1 AND action = $2
+    `;
+
+    const { rows } = await db.query(sql, [resource, action]);
+
+    if (rows.length === 0) return null;
+
+    // Cache the permission
+    permissionCache.set(cacheKey, rows[0]);
+    return rows[0];
+  } catch (error) {
+    logger.error(`Error getting permission by resource ${resource} and action ${action}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Create a new permission
+ * @async
+ * @function createPermission
+ * @param {Object} permission - Permission data
+ * @param {string} permission.resource - Resource identifier
+ * @param {string} permission.action - Action on the resource
+ * @param {string} [permission.description] - Description of the permission
+ * @returns {Promise<Object>} Newly created permission
+ */
+const createPermission = async ({ resource, action, description }) => {
+  try {
+    // Check if permission already exists
+    const existingPermission = await getPermissionByResourceAction(resource, action);
+    if (existingPermission) {
+      throw new Error(`Permission for resource '${resource}' and action '${action}' already exists`);
+    }
+
+    const sql = `
+      INSERT INTO permissions (resource, action, description) 
+      VALUES ($1, $2, $3) 
+      RETURNING id, resource, action, description, created_at, updated_at
+    `;
+
+    const { rows } = await db.query(sql, [resource, action, description]);
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return rows[0];
+  } catch (error) {
+    if (error.code === "23505") {
+      throw new Error(`Permission for resource '${resource}' and action '${action}' already exists`);
+    }
+    logger.error("Error creating permission:", error);
+    throw error;
+  }
+};
+
+/**
+ * Update a permission
+ * @async
+ * @function updatePermission
+ * @param {number} id - Permission ID
+ * @param {Object} updates - Fields to update
+ * @param {string} [updates.resource] - Resource identifier
+ * @param {string} [updates.action] - Action on the resource
+ * @param {string} [updates.description] - Description of the permission
+ * @returns {Promise<Object|null>} Updated permission or null if not found
+ */
+const updatePermission = async (id, { resource, action, description }) => {
+  try {
+    // Build update SQL based on provided fields
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (resource !== undefined) {
+      updates.push(`resource = $${paramIndex++}`);
+      values.push(resource);
+    }
+
+    if (action !== undefined) {
+      updates.push(`action = $${paramIndex++}`);
+      values.push(action);
+    }
+
+    if (description !== undefined) {
+      updates.push(`description = $${paramIndex++}`);
+      values.push(description);
+    }
+
+    if (updates.length === 0) {
+      // No fields to update, just return the current permission
+      return await getPermissionById(id);
+    }
+
+    // Add updatedAt and the ID parameter
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const sql = `
+      UPDATE permissions 
+      SET ${updates.join(", ")} 
+      WHERE id = $${paramIndex} 
+      RETURNING id, resource, action, description, created_at, updated_at
+    `;
+
+    const { rows } = await db.query(sql, values);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return rows[0];
+  } catch (error) {
+    if (error.code === "23505") {
+      throw new Error(`Permission with this resource and action combination already exists`);
+    }
+    logger.error(`Error updating permission ${id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a permission
+ * @async
+ * @function deletePermission
+ * @param {number} id - Permission ID
+ * @returns {Promise<boolean>} True if deleted, false if not found
+ */
+const deletePermission = async (id) => {
+  try {
+    // First check if this permission is assigned to any roles
+    const checkSql = `
+      SELECT COUNT(*) as count
+      FROM role_permissions
+      WHERE permission_id = $1
+    `;
+
+    const checkResult = await db.query(checkSql, [id]);
+    const count = parseInt(checkResult.rows[0].count);
+
+    if (count > 0) {
+      throw new Error(`Cannot delete permission: it is assigned to ${count} role(s)`);
+    }
+
+    const sql = `
+      DELETE FROM permissions 
+      WHERE id = $1 
+      RETURNING id
+    `;
+
+    const { rows } = await db.query(sql, [id]);
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return rows.length > 0;
+  } catch (error) {
+    logger.error(`Error deleting permission ${id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get all roles with their assigned permissions
+ * @async
+ * @function getRolesWithPermissions
+ * @returns {Promise<Array>} Array of role objects with permissions
+ */
+const getRolesWithPermissions = async () => {
+  try {
+    const sql = `
+      SELECT r.id, r.name, r.description,
+        COALESCE(json_agg(
+          json_build_object(
+            'id', p.id,
+            'resource', p.resource,
+            'action', p.action,
+            'description', p.description
+          )
+        ) FILTER (WHERE p.id IS NOT NULL), '[]') as permissions
+      FROM roles r
+      LEFT JOIN role_permissions rp ON r.id = rp.role_id
+      LEFT JOIN permissions p ON rp.permission_id = p.id
+      GROUP BY r.id
+      ORDER BY r.name
+    `;
+
+    const { rows } = await db.query(sql);
+    return rows;
+  } catch (error) {
+    logger.error("Error getting roles with permissions:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get a role with its assigned permissions
+ * @async
+ * @function getRoleWithPermissions
+ * @param {number} roleId - Role ID
+ * @returns {Promise<Object|null>} Role object with permissions or null if not found
+ */
+const getRoleWithPermissions = async (roleId) => {
+  try {
+    const sql = `
+      SELECT r.id, r.name, r.description,
+        COALESCE(json_agg(
+          json_build_object(
+            'id', p.id,
+            'resource', p.resource,
+            'action', p.action,
+            'description', p.description
+          )
+        ) FILTER (WHERE p.id IS NOT NULL), '[]') as permissions
+      FROM roles r
+      LEFT JOIN role_permissions rp ON r.id = rp.role_id
+      LEFT JOIN permissions p ON rp.permission_id = p.id
+      WHERE r.id = $1
+      GROUP BY r.id
+    `;
+
+    const { rows } = await db.query(sql, [roleId]);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return rows[0];
+  } catch (error) {
+    logger.error(`Error getting role with permissions for role ID ${roleId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Assign a permission to a role
+ * @async
+ * @function assignPermissionToRole
+ * @param {number} roleId - Role ID
+ * @param {number} permissionId - Permission ID
+ * @returns {Promise<Object>} Assignment details
+ */
+const assignPermissionToRole = async (roleId, permissionId) => {
+  try {
+    // Verify the role exists
+    const roleSql = `SELECT id FROM roles WHERE id = $1`;
+    const roleResult = await db.query(roleSql, [roleId]);
+    if (roleResult.rows.length === 0) {
+      throw new Error(`Role with ID ${roleId} not found`);
+    }
+
+    // Verify the permission exists
+    const permissionSql = `SELECT id FROM permissions WHERE id = $1`;
+    const permissionResult = await db.query(permissionSql, [permissionId]);
+    if (permissionResult.rows.length === 0) {
+      throw new Error(`Permission with ID ${permissionId} not found`);
+    }
+
+    // Check if already assigned
+    const checkSql = `
+      SELECT * FROM role_permissions
+      WHERE role_id = $1 AND permission_id = $2
+    `;
+
+    const checkResult = await db.query(checkSql, [roleId, permissionId]);
+    if (checkResult.rows.length > 0) {
+      return { already_assigned: true, role_id: roleId, permission_id: permissionId };
+    }
+
+    // Assign the permission
+    const sql = `
+      INSERT INTO role_permissions (role_id, permission_id)
+      VALUES ($1, $2)
+      RETURNING role_id, permission_id
+    `;
+
+    const { rows } = await db.query(sql, [roleId, permissionId]);
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return { assigned: true, role_id: rows[0].role_id, permission_id: rows[0].permission_id };
+  } catch (error) {
+    logger.error(`Error assigning permission ${permissionId} to role ${roleId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Remove a permission from a role
+ * @async
+ * @function removePermissionFromRole
+ * @param {number} roleId - Role ID
+ * @param {number} permissionId - Permission ID
+ * @returns {Promise<boolean>} True if removed, false if not found
+ */
+const removePermissionFromRole = async (roleId, permissionId) => {
+  try {
+    const sql = `
+      DELETE FROM role_permissions
+      WHERE role_id = $1 AND permission_id = $2
+      RETURNING role_id
+    `;
+
+    const { rows } = await db.query(sql, [roleId, permissionId]);
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return rows.length > 0;
+  } catch (error) {
+    logger.error(`Error removing permission ${permissionId} from role ${roleId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Update permissions for a role (replace all permissions)
+ * @async
+ * @function updateRolePermissions
+ * @param {number} roleId - Role ID
+ * @param {Array<number>} permissionIds - Array of permission IDs
+ * @returns {Promise<Object>} Update results
+ */
+const updateRolePermissions = async (roleId, permissionIds) => {
+  const client = await db.getClient();
+
+  try {
+    await client.query("BEGIN");
+
+    // Verify the role exists
+    const roleSql = `SELECT id FROM roles WHERE id = $1`;
+    const roleResult = await client.query(roleSql, [roleId]);
+    if (roleResult.rows.length === 0) {
+      throw new Error(`Role with ID ${roleId} not found`);
+    }
+
+    // Remove all current permissions for this role
+    const deleteSql = `DELETE FROM role_permissions WHERE role_id = $1`;
+    await client.query(deleteSql, [roleId]);
+
+    // If no new permissions, just return
+    if (!permissionIds || permissionIds.length === 0) {
+      await client.query("COMMIT");
+      clearPermissionCaches();
+      return { role_id: roleId, permissions_added: 0 };
+    }
+
+    // Verify all permissions exist
+    const placeholders = permissionIds.map((_, i) => `$${i + 1}`).join(", ");
+    const verifyPermsSql = `
+      SELECT id FROM permissions
+      WHERE id IN (${placeholders})
+    `;
+
+    const verifyPermsResult = await client.query(verifyPermsSql, permissionIds);
+    const validPermissionIds = verifyPermsResult.rows.map((row) => row.id);
+
+    if (validPermissionIds.length !== permissionIds.length) {
+      throw new Error("One or more permission IDs are invalid");
+    }
+
+    // Insert all new permissions
+    const insertValues = [];
+    const insertParams = [];
+
+    for (let i = 0; i < permissionIds.length; i++) {
+      insertValues.push(`($1, $${i + 2})`);
+      insertParams.push(permissionIds[i]);
+    }
+
+    if (insertValues.length > 0) {
+      const insertSql = `
+        INSERT INTO role_permissions (role_id, permission_id)
+        VALUES ${insertValues.join(", ")}
+      `;
+
+      await client.query(insertSql, [roleId, ...insertParams]);
+    }
+
+    await client.query("COMMIT");
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return {
+      role_id: roleId,
+      permissions_added: permissionIds.length,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    logger.error(`Error updating permissions for role ${roleId}:`, error);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Create a new role with permissions
+ * @async
+ * @function createRole
+ * @param {Object} roleData - Role data
+ * @param {string} roleData.name - Role name
+ * @param {string} [roleData.description] - Role description
+ * @param {Array<number>} [roleData.permissionIds] - Array of permission IDs
+ * @returns {Promise<Object>} Newly created role
+ */
+const createRole = async ({ name, description, permissionIds = [] }) => {
+  const client = await db.getClient();
+
+  try {
+    await client.query("BEGIN");
+
+    // Create the role
+    const roleSql = `
+      INSERT INTO roles (name, description)
+      VALUES ($1, $2)
+      RETURNING id, name, description, created_at, updated_at
+    `;
+
+    const roleResult = await client.query(roleSql, [name, description]);
+    const role = roleResult.rows[0];
+
+    // If permissions are provided, assign them
+    if (permissionIds && permissionIds.length > 0) {
+      // Verify all permissions exist
+      const placeholders = permissionIds.map((_, i) => `$${i + 1}`).join(", ");
+      const verifyPermsSql = `
+        SELECT id FROM permissions
+        WHERE id IN (${placeholders})
+      `;
+
+      const verifyPermsResult = await client.query(verifyPermsSql, permissionIds);
+      const validPermissionIds = verifyPermsResult.rows.map((row) => row.id);
+
+      if (validPermissionIds.length !== permissionIds.length) {
+        throw new Error("One or more permission IDs are invalid");
+      }
+
+      // Insert role-permission associations
+      const insertValues = [];
+      const insertParams = [];
+
+      for (let i = 0; i < permissionIds.length; i++) {
+        insertValues.push(`($1, $${i + 2})`);
+        insertParams.push(permissionIds[i]);
+      }
+
+      if (insertValues.length > 0) {
+        const insertSql = `
+          INSERT INTO role_permissions (role_id, permission_id)
+          VALUES ${insertValues.join(", ")}
+        `;
+
+        await client.query(insertSql, [role.id, ...insertParams]);
+      }
+    }
+
+    await client.query("COMMIT");
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return role;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error.code === "23505") {
+      throw new Error(`Role with name '${name}' already exists`);
+    }
+    logger.error("Error creating role:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Update a role
+ * @async
+ * @function updateRole
+ * @param {number} id - Role ID
+ * @param {Object} updates - Fields to update
+ * @param {string} [updates.name] - Role name
+ * @param {string} [updates.description] - Role description
+ * @returns {Promise<Object|null>} Updated role or null if not found
+ */
+const updateRole = async (id, { name, description }) => {
+  try {
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      values.push(name);
+    }
+
+    if (description !== undefined) {
+      updates.push(`description = $${paramIndex++}`);
+      values.push(description);
+    }
+
+    if (updates.length === 0) {
+      // No fields to update, return the current role
+      const roleSql = `
+        SELECT id, name, description, created_at, updated_at
+        FROM roles WHERE id = $1
+      `;
+      const roleResult = await db.query(roleSql, [id]);
+      return roleResult.rows[0] || null;
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const sql = `
+      UPDATE roles 
+      SET ${updates.join(", ")} 
+      WHERE id = $${paramIndex} 
+      RETURNING id, name, description, created_at, updated_at
+    `;
+
+    const { rows } = await db.query(sql, values);
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return rows[0];
+  } catch (error) {
+    if (error.code === "23505") {
+      throw new Error(`Role with this name already exists`);
+    }
+    logger.error(`Error updating role ${id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a role
+ * @async
+ * @function deleteRole
+ * @param {number} id - Role ID
+ * @returns {Promise<boolean>} True if deleted, false if not found
+ */
+const deleteRole = async (id) => {
+  const client = await db.getClient();
+
+  try {
+    await client.query("BEGIN");
+
+    // Check if this role is assigned to any users
+    const checkUsersSql = `
+      SELECT COUNT(*) as count
+      FROM user_roles
+      WHERE role_id = $1
+    `;
+
+    const checkUsersResult = await client.query(checkUsersSql, [id]);
+    const userCount = parseInt(checkUsersResult.rows[0].count);
+
+    if (userCount > 0) {
+      throw new Error(`Cannot delete role: it is assigned to ${userCount} user(s)`);
+    }
+
+    // Delete role permissions first
+    const deletePermsSql = `DELETE FROM role_permissions WHERE role_id = $1`;
+    await client.query(deletePermsSql, [id]);
+
+    // Delete the role
+    const deleteSql = `DELETE FROM roles WHERE id = $1 RETURNING id`;
+    const deleteResult = await client.query(deleteSql, [id]);
+
+    await client.query("COMMIT");
+
+    // Clear caches
+    clearPermissionCaches();
+
+    return deleteResult.rows.length > 0;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    logger.error(`Error deleting role ${id}:`, error);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = {
+  getAllPermissions,
+  getPermissionById,
+  getPermissionByResourceAction,
+  createPermission,
+  updatePermission,
+  deletePermission,
+  getRolesWithPermissions,
+  getRoleWithPermissions,
+  assignPermissionToRole,
+  removePermissionFromRole,
+  updateRolePermissions,
+  createRole,
+  updateRole,
+  deleteRole,
+  clearPermissionCaches,
+};

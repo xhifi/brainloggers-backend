@@ -1,0 +1,1034 @@
+{
+  "info": {
+    "_postman_id": "bf6d7c74-e4e5-4a85-8e57-97108bd2e30b",
+    "name": "Auth App API Collection",
+    "description": "Complete API collection for auth-app-plain-sql-rbac-v2 with role-based access control (RBAC)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "Authentication and authorization endpoints",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testUserEmail}}\",\n    \"password\": \"{{testUserPassword}}\",\n    \"confirmPassword\": \"{{testUserPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/register",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);",
+                  "if (jsonData.token) {",
+                  "    pm.environment.set('accessToken', jsonData.token);",
+                  "    console.log('Access token saved to environment');",
+                  "}",
+                  "",
+                  "// Extract user ID if available in the response",
+                  "if (jsonData.user && jsonData.user.id) {",
+                  "    pm.environment.set('currentUserId', jsonData.user.id);",
+                  "    console.log('User ID saved to environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testUserEmail}}\",\n    \"password\": \"{{testUserPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/login",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Authenticate a user and receive access token"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/verify-email?token={{verificationToken}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "verify-email"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{verificationToken}}",
+                  "description": "Email verification token sent to user's email"
+                }
+              ]
+            },
+            "description": "Verify a user's email address with token"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);",
+                  "if (jsonData.token) {",
+                  "    pm.environment.set('accessToken', jsonData.token);",
+                  "    console.log('Access token refreshed and saved to environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/refresh",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Get a new access token using refresh token cookie"
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testUserEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/forgot-password",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            },
+            "description": "Request a password reset email"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"{{resetToken}}\",\n    \"password\": \"{{newPassword}}\",\n    \"confirmPassword\": \"{{newPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/reset-password",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "reset-password"]
+            },
+            "description": "Reset password with token"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/logout",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Logout a user (invalidate tokens)"
+          },
+          "response": []
+        },
+        {
+          "name": "Check Session",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/session",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "session"]
+            },
+            "description": "Check if user is authenticated (returns user data if authenticated)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Management",
+      "description": "User profile and management endpoints with RBAC",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/me",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Get the current authenticated user's profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users?page={{page}}&limit={{limit}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Page number for pagination"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Number of results per page"
+                }
+              ]
+            },
+            "description": "Get a list of all users in the system (requires 'users:read_all' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "Get a specific user by ID (requires 'users:read_any' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{updatedEmail}}\",\n    \"firstName\": \"{{firstName}}\",\n    \"lastName\": \"{{lastName}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "Update a user's profile by ID (requires 'users:update_own' or 'users:update_any' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Current User Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"firstName\": \"{{updatedFirstName}}\",\n    \"lastName\": \"{{updatedLastName}}\",\n    \"email\": \"{{currentEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/me",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Update the current user's profile information"
+          },
+          "response": []
+        },
+        {
+          "name": "Change Own Password",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"currentPassword\": \"{{currentPassword}}\",\n    \"newPassword\": \"{{newPassword}}\",\n    \"confirmPassword\": \"{{newPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/me/change-password",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "me", "change-password"]
+            },
+            "description": "Change the current user's password"
+          },
+          "response": []
+        },
+        {
+          "name": "Create New User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{newUserEmail}}\",\n    \"password\": \"{{newUserPassword}}\",\n    \"confirmPassword\": \"{{newUserPassword}}\",\n    \"firstName\": \"{{firstName}}\",\n    \"lastName\": \"{{lastName}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/users",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "Create a new user account (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Reset User Password",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{userId}}\",\n    \"newPassword\": \"{{newPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/reset-password",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "reset-password"]
+            },
+            "description": "Reset a user's password (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Change User Password",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"newPassword\": \"{{newPassword}}\",\n    \"confirmPassword\": \"{{newPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}/change-password",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}", "change-password"]
+            },
+            "description": "Change a user's password (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "Delete a user account (Admin only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Storage (S3)",
+      "description": "File and folder operations using S3 storage",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{filePath}}"
+                },
+                {
+                  "key": "folderPath",
+                  "value": "{{folderPath}}",
+                  "description": "Optional folder path to store file in",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/upload",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "upload"]
+            },
+            "description": "Upload a file to S3 (requires 'storage:write' or 'storage:admin' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Folder",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"folderPath\": \"{{folderPath}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/folders",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "folders"]
+            },
+            "description": "Create a folder in S3 (requires 'storage:write' or 'storage:admin' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/files/{{fileKey}}?presigned={{presigned}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "files", "{{fileKey}}"],
+              "query": [
+                {
+                  "key": "presigned",
+                  "value": "{{presigned}}",
+                  "description": "Set to true to get a presigned URL instead of file content"
+                }
+              ]
+            },
+            "description": "Get a file from S3 - download or get presigned URL (requires 'storage:read' or 'storage:admin' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "List Files",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/list?prefix={{prefix}}&recursive={{recursive}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "list"],
+              "query": [
+                {
+                  "key": "prefix",
+                  "value": "{{prefix}}",
+                  "description": "S3 prefix (folder path) to list"
+                },
+                {
+                  "key": "recursive",
+                  "value": "{{recursive}}",
+                  "description": "Whether to list recursively"
+                }
+              ]
+            },
+            "description": "List files and folders in S3 (requires 'storage:list' or 'storage:admin' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{filePath}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/files/{{fileKey}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "files", "{{fileKey}}"]
+            },
+            "description": "Update a file in S3 (requires 'storage:write' or 'storage:admin' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Move/Rename File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"sourceKey\": \"{{sourceKey}}\",\n    \"destinationKey\": \"{{destinationKey}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/move",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "move"]
+            },
+            "description": "Move/rename a file in S3 (requires 'storage:write' or 'storage:admin' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/files/{{fileKey}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "files", "{{fileKey}}"]
+            },
+            "description": "Delete a file from S3 (requires 'storage:delete' or 'storage:admin' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Folder",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"folderPath\": \"{{folderPath}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/folders",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "folders"]
+            },
+            "description": "Delete a folder from S3 (requires 'storage:delete' or 'storage:admin' permission)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin Operations",
+      "description": "Administrative operations requiring admin permissions",
+      "item": [
+        {
+          "name": "Get System Status",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/admin/status",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["admin", "status"]
+            },
+            "description": "Check system status (requires admin role)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "description": "System-related endpoints",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/health",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Check the health of the API"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Role Management",
+      "description": "Role-based access control administration",
+      "item": [
+        {
+          "name": "Get User Roles",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}/roles",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}", "roles"]
+            },
+            "description": "Get all roles assigned to a user"
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Role to User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"roleId\": \"{{roleId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}/roles",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}", "roles"]
+            },
+            "description": "Assign a role to a user (Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Role from User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}/roles/{{roleId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}", "roles", "{{roleId}}"]
+            },
+            "description": "Remove a role from a user (Admin only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Permissions",
+      "description": "Permission management endpoints",
+      "item": [
+        {
+          "name": "Get All Permissions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/permissions",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["permissions"]
+            },
+            "description": "Get all available permissions in the system"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Permissions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/permissions/my-permissions",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["permissions", "my-permissions"]
+            },
+            "description": "Get all permissions for the current user"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": ["// Global pre-request script", "// You can add common pre-request logic here"]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script",
+          "// Common test logic can go here",
+          "",
+          "// Check for unauthorized responses and alert if token might be expired",
+          "if (pm.response.code === 401) {",
+          "    console.log('Unauthorized response received. Your token may have expired.');",
+          "}"
+        ]
+      }
+    }
+  ]
+}

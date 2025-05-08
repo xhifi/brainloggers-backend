@@ -1,0 +1,195 @@
+/**
+ * @module services/user
+ * @description Service for managing user accounts, authentication, and profile operations
+ */
+const db = require("../config/db");
+const { hashPassword } = require("../utils/hash");
+const { v4: uuidv4 } = require("uuid"); // If generating UUIDs in the app
+const crypto = require("crypto"); // For generating random tokens
+
+/**
+ * Finds a user by their email address
+ * @async
+ * @function findUserByEmail
+ * @param {string} email - The email address to search for
+ * @returns {Promise<Object|null>} User object with roles if found, null otherwise
+ * @property {string} id - User's unique identifier
+ * @property {string} email - User's email address
+ * @property {string} password_hash - User's hashed password (for authentication only)
+ * @property {boolean} is_verified - Whether the user's email is verified
+ * @property {Array<string>} roles - Array of role names assigned to the user
+ */
+const findUserByEmail = async (email) => {
+  if (!email) return null;
+  const sql = `
+        SELECT u.id, u.email, u.password_hash, u.is_verified, array_agg(r.name) FILTER (WHERE r.name IS NOT NULL) as roles
+        FROM users u
+        LEFT JOIN user_roles ur ON u.id = ur.user_id
+        LEFT JOIN roles r ON ur.role_id = r.id
+        WHERE u.email = \$1
+        GROUP BY u.id;
+    `;
+  const { rows } = await db.query(sql, [email]);
+  return rows[0]; // Returns user object or undefined
+};
+
+/**
+ * Finds a user by their ID
+ * @async
+ * @function findUserById
+ * @param {string} id - The user ID to search for
+ * @returns {Promise<Object|null>} User object with roles if found, null otherwise
+ * @property {string} id - User's unique identifier
+ * @property {string} email - User's email address
+ * @property {boolean} is_verified - Whether the user's email is verified
+ * @property {Array<string>} roles - Array of role names assigned to the user
+ */
+const findUserById = async (id) => {
+  if (!id) return null;
+  const sql = `
+        SELECT u.id, u.email, u.is_verified, array_agg(r.name) FILTER (WHERE r.name IS NOT NULL) as roles
+        FROM users u
+        LEFT JOIN user_roles ur ON u.id = ur.user_id
+        LEFT JOIN roles r ON ur.role_id = r.id
+        WHERE u.id = \$1
+        GROUP BY u.id;
+    `;
+  const { rows } = await db.query(sql, [id]);
+  return rows[0];
+};
+
+/**
+ * Creates a new user account
+ * @async
+ * @function createUser
+ * @param {string} email - The email address for the new user
+ * @param {string} password - The plaintext password (will be hashed before storage)
+ * @returns {Promise<Object>} The created user object
+ * @property {string} id - New user's unique identifier
+ * @property {string} email - User's email address
+ * @property {string} verification_token - Token for email verification
+ * @property {boolean} is_verified - Whether the user is verified (false for new users)
+ * @throws {Error} If email is already in use or other database error occurs
+ */
+const createUser = async (name, email, password) => {
+  const hashedPassword = await hashPassword(password);
+  const verificationToken = crypto.randomBytes(32).toString("hex");
+
+  const sql = `
+        INSERT INTO users (full_name, email, password_hash, verification_token)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, email, verification_token, is_verified;
+    `;
+  try {
+    const { rows } = await db.query(sql, [name, email, hashedPassword, verificationToken]);
+    return rows[0];
+  } catch (error) {
+    if (error.code === "23505") {
+      // Unique violation code for PostgreSQL
+      throw new Error("Email already in use"); // Throw specific error
+    }
+    console.error("Error creating user:", error);
+    throw new Error("Could not create user"); // Generic error for other issues
+  }
+};
+
+/**
+ * Verifies a user's email using the verification token
+ * @async
+ * @function verifyUser
+ * @param {string} token - The verification token sent to the user's email
+ * @returns {Promise<Object|null>} The verified user object or null if token invalid/already used
+ * @property {string} id - User's unique identifier
+ * @property {string} email - User's email address
+ * @property {boolean} is_verified - Will be true if verification successful
+ */
+const verifyUser = async (token) => {
+  if (!token) return null;
+  const sql = `
+        UPDATE users
+        SET is_verified = true, verification_token = NULL, updated_at = NOW()
+        WHERE verification_token = \$1 AND is_verified = false
+        RETURNING id, email, is_verified;
+     `;
+  const { rows } = await db.query(sql, [token]);
+  return rows[0]; // Returns updated user or undefined if token invalid/used
+};
+
+/**
+ * Sets a password reset token for a user
+ * @async
+ * @function setPasswordResetToken
+ * @param {string} userId - The ID of the user requesting password reset
+ * @param {string} token - The generated reset token
+ * @returns {Promise<Object>} User object if token was set
+ * @property {string} id - User's unique identifier
+ * @property {string} email - User's email address
+ */
+const setPasswordResetToken = async (userId, token) => {
+  const expiryMinutes = 60; // Token valid for 60 minutes
+  const expires = new Date(Date.now() + expiryMinutes * 60 * 1000);
+  const sql = `
+        UPDATE users
+        SET password_reset_token = \$1, password_reset_expires = \$2, updated_at = NOW()
+        WHERE id = \$3
+        RETURNING id, email;
+        `;
+  const { rows } = await db.query(sql, [token, expires, userId]);
+  return rows[0];
+};
+
+/**
+ * Finds a user by their password reset token
+ * @async
+ * @function findUserByResetToken
+ * @param {string} token - The reset token to validate
+ * @returns {Promise<Object|null>} User object if token valid and not expired, null otherwise
+ * @property {string} id - User's unique identifier
+ * @property {string} email - User's email address
+ * @property {Date} password_reset_expires - When the reset token expires
+ */
+const findUserByResetToken = async (token) => {
+  if (!token) return null;
+  const sql = `
+        SELECT id, email, password_reset_expires
+        FROM users
+        WHERE password_reset_token = \$1 AND password_reset_expires > NOW();
+        `;
+  const { rows } = await db.query(sql, [token]);
+  return rows[0]; // Returns user if token valid and not expired
+};
+
+/**
+ * Resets a user's password
+ * @async
+ * @function resetPassword
+ * @param {string} userId - The ID of the user
+ * @param {string} newPassword - The new plaintext password (will be hashed)
+ * @returns {Promise<Object>} Updated user object
+ * @property {string} id - User's unique identifier
+ * @property {string} email - User's email address
+ */
+const resetPassword = async (userId, newPassword) => {
+  const hashedPassword = await hashPassword(newPassword);
+  const sql = `
+        UPDATE users
+        SET password_hash = \$1, password_reset_token = NULL, password_reset_expires = NULL, updated_at = NOW()
+        WHERE id = \$2
+        RETURNING id, email;
+        `;
+  const { rows } = await db.query(sql, [hashedPassword, userId]);
+  return rows[0];
+};
+
+// TODO: Add functions to assign/remove roles (e.g., assignRoleToUser(userId, roleName))
+// TODO: Add functions to update user profile fields more granularly
+
+module.exports = {
+  findUserByEmail,
+  findUserById,
+  createUser,
+  verifyUser,
+  setPasswordResetToken,
+  findUserByResetToken,
+  resetPassword,
+};

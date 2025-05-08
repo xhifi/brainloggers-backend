@@ -1,0 +1,209 @@
+{
+  "id": "{{environmentId}}",
+  "name": "Auth App Environment",
+  "values": [
+    {
+      "key": "apiBaseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "default",
+      "enabled": true,
+      "description": "Base URL for the API"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "JWT access token for authentication"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "testUserEmail",
+      "value": "test@example.com",
+      "type": "default",
+      "enabled": true,
+      "description": "Email address for test user"
+    },
+    {
+      "key": "testUserPassword",
+      "value": "StrongPassword123!",
+      "type": "default",
+      "enabled": true,
+      "description": "Password for test user"
+    },
+    {
+      "key": "verificationToken",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Email verification token received via email"
+    },
+    {
+      "key": "resetToken",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "Password reset token received via email"
+    },
+    {
+      "key": "newPassword",
+      "value": "YourNewPassword123!",
+      "type": "secret",
+      "enabled": true,
+      "description": "New password for reset"
+    },
+    {
+      "key": "currentEmail",
+      "value": "user@example.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "currentPassword",
+      "value": "YourCurrentPassword",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "updatedEmail",
+      "value": "updated@example.com",
+      "type": "default",
+      "enabled": true,
+      "description": "Updated email for user profile"
+    },
+    {
+      "key": "updatedFirstName",
+      "value": "Updated",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "updatedLastName",
+      "value": "User",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "newUserEmail",
+      "value": "newuser@example.com",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "newUserPassword",
+      "value": "NewUserPass123!",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "firstName",
+      "value": "New",
+      "type": "default",
+      "enabled": true,
+      "description": "First name for user profile"
+    },
+    {
+      "key": "lastName",
+      "value": "User",
+      "type": "default",
+      "enabled": true,
+      "description": "Last name for user profile"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "User ID for API operations"
+    },
+    {
+      "key": "roleId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "currentUserId",
+      "value": "",
+      "type": "default",
+      "enabled": true,
+      "description": "ID of the currently logged in user"
+    },
+    {
+      "key": "page",
+      "value": "1",
+      "type": "default",
+      "enabled": true,
+      "description": "Page number for pagination"
+    },
+    {
+      "key": "limit",
+      "value": "10",
+      "type": "default",
+      "enabled": true,
+      "description": "Number of items per page"
+    },
+    {
+      "key": "folderPath",
+      "value": "documents/test",
+      "type": "default",
+      "enabled": true,
+      "description": "Sample folder path for S3 operations"
+    },
+    {
+      "key": "fileKey",
+      "value": "documents/test/example.txt",
+      "type": "default",
+      "enabled": true,
+      "description": "Sample file key for S3 operations"
+    },
+    {
+      "key": "filePath",
+      "value": "/path/to/your/file.txt",
+      "type": "default",
+      "enabled": true,
+      "description": "Local file path for upload"
+    },
+    {
+      "key": "presigned",
+      "value": "true",
+      "type": "default",
+      "enabled": true,
+      "description": "Whether to get a presigned URL for file operations"
+    },
+    {
+      "key": "prefix",
+      "value": "documents",
+      "type": "default",
+      "enabled": true,
+      "description": "Prefix for listing files in S3"
+    },
+    {
+      "key": "recursive",
+      "value": "false",
+      "type": "default",
+      "enabled": true,
+      "description": "Whether to list files recursively in S3"
+    },
+    {
+      "key": "sourceKey",
+      "value": "documents/test/source.txt",
+      "type": "default",
+      "enabled": true,
+      "description": "Source file key for move operations"
+    },
+    {
+      "key": "destinationKey",
+      "value": "documents/test/destination.txt",
+      "type": "default",
+      "enabled": true,
+      "description": "Destination file key for move operations"
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
