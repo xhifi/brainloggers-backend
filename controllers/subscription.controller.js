@@ -19,13 +19,28 @@ const subscribe = async (req, res, next) => {
   try {
     const { email, name, dateOfBirth, metadata } = req.body;
 
+    const exists = await subscriptionService.getSubscriberByEmail(email);
+
+    if (exists) {
+      if (exists.is_active) {
+        throw new ConflictResourceError("Email is already subscribed");
+      }
+      const updateSubscription = await subscriptionService.updateSubscriber(exists.id, {
+        isActive: true,
+      });
+      if (metadata.tags) await subscriptionService.addTagsToSubscriber(exists.id, metadata.tags);
+      return res.status(200).json({
+        message: "Successfully re-subscribed to the mailing list",
+        subscriber: updateSubscription,
+      });
+    }
     const subscriber = await subscriptionService.subscribe({
       email,
       name,
       dateOfBirth,
       metadata,
     });
-
+    const tagsAdded = await subscriptionService.addTagsToSubscriber(subscriber.id, metadata.tags);
     return res.status(201).json({
       message: "Successfully subscribed to the mailing list",
       subscriber,
@@ -53,7 +68,6 @@ const unsubscribe = async (req, res, next) => {
     const { email } = req.body;
 
     const result = await subscriptionService.unsubscribe(email);
-
     if (!result) {
       throw new NotFoundError("Email not found or already unsubscribed");
     }
@@ -267,6 +281,162 @@ const exportSubscribers = async (req, res, next) => {
   }
 };
 
+/**
+ * Add tags to a subscriber
+ * @async
+ * @function addTagsToSubscriber
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with added tags
+ */
+const addTagsToSubscriber = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { tags } = req.body;
+
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return res.status(400).json({ message: "Tags array is required" });
+    }
+
+    // Check if subscriber exists
+    const subscriber = await subscriptionService.getSubscriberById(id);
+
+    if (!subscriber) {
+      throw new NotFoundError("Subscriber not found");
+    }
+
+    const addedTags = await subscriptionService.addTagsToSubscriber(id, tags);
+
+    return res.status(200).json({
+      message: "Tags added successfully",
+      tags: addedTags,
+    });
+  } catch (error) {
+    logger.error("Error in addTagsToSubscriber controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Remove tags from a subscriber
+ * @async
+ * @function removeTagsFromSubscriber
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response
+ */
+const removeTagsFromSubscriber = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { tags } = req.body;
+
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return res.status(400).json({ message: "Tags array is required" });
+    }
+
+    // Check if subscriber exists
+    const subscriber = await subscriptionService.getSubscriberById(id);
+
+    if (!subscriber) {
+      throw new NotFoundError("Subscriber not found");
+    }
+
+    const removedCount = await subscriptionService.removeTagsFromSubscriber(id, tags);
+
+    return res.status(200).json({
+      message: "Tags removed successfully",
+      count: removedCount,
+    });
+  } catch (error) {
+    logger.error("Error in removeTagsFromSubscriber controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Get all tags for a subscriber
+ * @async
+ * @function getSubscriberTags
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with tags
+ */
+const getSubscriberTags = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Check if subscriber exists
+    const subscriber = await subscriptionService.getSubscriberById(id);
+
+    if (!subscriber) {
+      throw new NotFoundError("Subscriber not found");
+    }
+
+    const tags = await subscriptionService.getSubscriberTags(id);
+
+    return res.status(200).json({ tags });
+  } catch (error) {
+    logger.error("Error in getSubscriberTags controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Get all tags in the system
+ * @async
+ * @function getAllTags
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with all tags
+ */
+const getAllTags = async (req, res, next) => {
+  try {
+    const { search } = req.query;
+    const tags = await subscriptionService.getAllTags({ search });
+
+    return res.status(200).json({ tags });
+  } catch (error) {
+    logger.error("Error in getAllTags controller:", { error });
+    return next(error);
+  }
+};
+
+/**
+ * Get subscribers by tags
+ * @async
+ * @function getSubscribersByTags
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ * @returns {Object} JSON response with subscribers matching tags
+ */
+const getSubscribersByTags = async (req, res, next) => {
+  try {
+    const { tags } = req.body;
+    const { page, limit, matchType, isActive } = req.query;
+
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return res.status(400).json({ message: "Tags array is required" });
+    }
+
+    const result = await subscriptionService.getSubscribersByTags(tags, {
+      page: parseInt(page) || 1,
+      limit: parseInt(limit) || 10,
+      matchType: matchType === "all" ? "all" : "any",
+      isActive: isActive === "true" ? true : isActive === "false" ? false : undefined,
+    });
+
+    return res.status(200).json(result);
+  } catch (error) {
+    logger.error("Error in getSubscribersByTags controller:", { error });
+    return next(error);
+  }
+};
+
 module.exports = {
   subscribe,
   unsubscribe,
@@ -277,4 +447,9 @@ module.exports = {
   importSubscribers,
   importSubscribersFromFile,
   exportSubscribers,
+  addTagsToSubscriber,
+  removeTagsFromSubscriber,
+  getSubscriberTags,
+  getAllTags,
+  getSubscribersByTags,
 };

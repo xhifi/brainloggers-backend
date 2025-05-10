@@ -224,7 +224,6 @@ CREATE TABLE tags (
   name VARCHAR(100) NOT NULL,
   description TEXT,
   color VARCHAR(20), -- For UI display purposes (hex code or name)
-  type VARCHAR(50) NOT NULL, -- 'system', 'custom', etc.
   created_by UUID REFERENCES users(id),
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -345,7 +344,14 @@ INSERT INTO permissions (resource, action, description) VALUES
   ('subscriptions', 'update', 'Can update subscriber information'),
   ('subscriptions', 'delete', 'Can delete subscribers'),
   ('subscriptions', 'import', 'Can import subscribers from CSV files or content'),
-  ('subscriptions', 'export', 'Can export subscribers to CSV')
+  ('subscriptions', 'export', 'Can export subscribers to CSV'),
+  -- tag management permissions
+  ('tags', 'read', 'Can view tags and tagged subscribers'),
+  ('tags', 'create', 'Can create new tags'),
+  ('tags', 'update', 'Can update tag information'),
+  ('tags', 'delete', 'Can delete tags'),
+  ('tags', 'assign', 'Can assign tags to subscribers'),
+  ('tags', 'unassign', 'Can remove tags from subscribers')
   -- Add permissions for other resources like posts, settings etc.
   -- ('posts', 'create', 'Can create posts'),
   -- ('posts', 'publish', 'Can publish posts')
@@ -404,6 +410,41 @@ BEGIN
     END IF;
 END $$;
 
+-- Assign all tag permissions to admin role
+DO $$
+DECLARE
+    admin_role_id INTEGER;
+BEGIN
+    SELECT id INTO admin_role_id FROM roles WHERE name = 'admin';
+    
+    IF admin_role_id IS NOT NULL THEN
+        INSERT INTO role_permissions (role_id, permission_id)
+        SELECT admin_role_id, p.id
+        FROM permissions p 
+        WHERE p.resource = 'tags'
+        ON CONFLICT (role_id, permission_id) DO NOTHING;
+    ELSE
+        RAISE NOTICE 'Admin role not found, skipping permission assignment.';
+    END IF;
+END $$;
+
+-- Assign read permission to editor role
+DO $$
+DECLARE
+    editor_role_id INTEGER;
+    read_permission_id INTEGER;
+BEGIN
+    SELECT id INTO editor_role_id FROM roles WHERE name = 'editor';
+    SELECT id INTO read_permission_id FROM permissions WHERE resource = 'tags' AND action = 'read';
+    
+    IF editor_role_id IS NOT NULL AND read_permission_id IS NOT NULL THEN
+        INSERT INTO role_permissions (role_id, permission_id)
+        VALUES (editor_role_id, read_permission_id)
+        ON CONFLICT (role_id, permission_id) DO NOTHING;
+    ELSE
+        RAISE NOTICE 'Editor role or tags:read permission not found, skipping permission assignment.';
+    END IF;
+END $$;
 
 -- Example: Assign specific permissions to editor
 DO $$

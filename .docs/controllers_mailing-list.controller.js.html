@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>controllers/mailing-list.controller.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">controllers/mailing-list.controller.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module controllers/mailing-list
+ * @description Controller for mailing list endpoints
+ */
+const mailingListService = require("../services/mailing-list.service");
+const { BadRequest } = require("../utils/errors");
+const logger = require("../services/logger.service");
+
+/**
+ * Create a new mailing list
+ * @async
+ * @function createMailingList
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+exports.createMailingList = async (req, res, next) => {
+  try {
+    const { name, description, sourceType, filterCriteria, tagFilter } = req.body;
+    const userId = req.user.id;
+
+    if (!name) {
+      throw new BadRequest("Mailing list name is required");
+    }
+
+    const mailingList = await mailingListService.createMailingList({
+      name,
+      description,
+      sourceType,
+      filterCriteria,
+      tagFilter
+    }, userId);
+
+    res.status(201).json({
+      success: true,
+      data: mailingList
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update an existing mailing list
+ * @async
+ * @function updateMailingList
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+exports.updateMailingList = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const mailingList = await mailingListService.updateMailingList(
+      id, 
+      req.body, 
+      userId
+    );
+
+    res.json({
+      success: true,
+      data: mailingList
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete a mailing list
+ * @async
+ * @function deleteMailingList
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+exports.deleteMailingList = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    await mailingListService.deleteMailingList(id);
+
+    res.json({
+      success: true,
+      message: "Mailing list deleted successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get a mailing list by ID
+ * @async
+ * @function getMailingListById
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+exports.getMailingListById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const mailingList = await mailingListService.getMailingListById(id);
+
+    res.json({
+      success: true,
+      data: mailingList
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * List mailing lists with pagination and filtering
+ * @async
+ * @function listMailingLists
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+exports.listMailingLists = async (req, res, next) => {
+  try {
+    const { page, limit, search, isActive } = req.query;
+
+    const options = {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+      isActive: isActive !== undefined ? isActive === "true" : undefined
+    };
+
+    const result = await mailingListService.listMailingLists(options);
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get recipients of a mailing list
+ * @async
+ * @function getMailingListRecipients
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+exports.getMailingListRecipients = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { page, limit } = req.query;
+
+    const options = {
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined
+    };
+
+    const result = await mailingListService.getMailingListRecipients(id, options);
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get available variables for a mailing list
+ * @async
+ * @function getMailingListVariables
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+exports.getMailingListVariables = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const variables = await mailingListService.getMailingListVariables(id);
+
+    res.json({
+      success: true,
+      data: variables
+    });
+  } catch (error) {
+    next(error);
+  }
+};</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

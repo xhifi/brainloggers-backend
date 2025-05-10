@@ -2,33 +2,13 @@
  * @module services/s3
  * @description Service for Amazon S3 storage operations (CRUD for files and folders)
  */
-const {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-  ListObjectsV2Command,
-  CopyObjectCommand,
-} = require("@aws-sdk/client-s3");
+const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command, CopyObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { Readable } = require("stream");
 const config = require("../config");
 const logger = require("./logger.service");
+const { s3Client } = require("../config/aws");
 
-// Create an S3 client instance
-const s3ClientConfig = {
-  region: config.aws.region,
-};
-
-// Only add credentials if explicitly provided, otherwise rely on SDK's default chain
-if (config.aws.accessKeyId && config.aws.secretAccessKey) {
-  s3ClientConfig.credentials = {
-    accessKeyId: config.aws.accessKeyId,
-    secretAccessKey: config.aws.secretAccessKey,
-  };
-}
-
-const s3Client = new S3Client(s3ClientConfig);
 const bucketName = config.aws.s3BucketName;
 
 /**

@@ -1,5 +1,5 @@
 /**
- * @module routes/permission
+ * @module Routes/Permissions
  * @description Routes for permission management operations
  */
 const express = require("express");

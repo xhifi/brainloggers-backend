@@ -1,5 +1,5 @@
 /**
- * @module routes/template.routes
+ * @module Routes/Templates
  * @description Routes for email template management
  */
 const express = require("express");
@@ -60,11 +60,11 @@ router.put("/:id", ...templateUpdateAccess, validate(validateTemplate), template
 router.delete("/:id", ...templateDeleteAccess, templateController.deleteTemplate);
 
 /**
- * @route   POST /api/templates/upload-image
- * @desc    Upload an image to use in templates
+ * @route   POST /api/templates/:templateId/upload-image
+ * @desc    Upload an image to use in a specific template
  * @access  Private - Requires template:create or template:update permission
  */
-router.post("/upload-image", ...templateEditAccess, upload.single("image"), templateController.uploadTemplateImage);
+router.post("/:templateId/upload-image", ...templateEditAccess, upload.single("image"), templateController.uploadTemplateImage);
 
 /**
  * @route   POST /api/templates/:id/render

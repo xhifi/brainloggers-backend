@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>routes/subscription.routes.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">routes/subscription.routes.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module Routes/Subscriptions
+ * @description Routes for handling email subscription operations
+ */
+const express = require("express");
+const subscriptionController = require("../controllers/subscription.controller");
+const { validate } = require("../middleware/validate");
+const {
+  subscribeSchema,
+  unsubscribeSchema,
+  subscriberIdSchema,
+  updateSubscriberSchema,
+  importSubscribersSchema,
+  getSubscribersSchema,
+} = require("../dtos/subscription.dto");
+const authenticate = require("../middleware/authenticate");
+const { hasRoles } = require("../middleware/authorize");
+const { upload, handleMulterError } = require("../middleware/upload");
+
+const router = express.Router();
+
+// Public routes for subscribing and unsubscribing
+/**
+ * @route POST /api/subscriptions/subscribe
+ * @description Subscribe to the mailing list
+ * @access Public
+ */
+router.post("/subscribe", validate(subscribeSchema), subscriptionController.subscribe);
+
+/**
+ * @route POST /api/subscriptions/unsubscribe
+ * @description Unsubscribe from the mailing list
+ * @access Public
+ */
+router.post("/unsubscribe", validate(unsubscribeSchema), subscriptionController.unsubscribe);
+
+// Admin routes for managing subscribers - protected with authentication and authorization
+/**
+ * @route GET /api/subscriptions/
+ * @description Get all subscribers with pagination and filtering
+ * @access Private (Admin)
+ */
+router.get("/", authenticate, hasRoles("admin"), validate(getSubscribersSchema), subscriptionController.getSubscribers);
+
+/**
+ * @route GET /api/subscriptions/:id
+ * @description Get a single subscriber by ID
+ * @access Private (Admin)
+ */
+router.get("/:id", authenticate, hasRoles("admin"), validate(subscriberIdSchema), subscriptionController.getSubscriberById);
+
+/**
+ * @route PUT /api/subscriptions/:id
+ * @description Update a subscriber
+ * @access Private (Admin)
+ */
+router.put("/:id", authenticate, hasRoles("admin"), validate(updateSubscriberSchema), subscriptionController.updateSubscriber);
+
+/**
+ * @route DELETE /api/subscriptions/:id
+ * @description Delete a subscriber
+ * @access Private (Admin)
+ */
+router.delete("/:id", authenticate, hasRoles("admin"), validate(subscriberIdSchema), subscriptionController.deleteSubscriber);
+
+/**
+ * @route POST /api/subscriptions/import
+ * @description Import subscribers from CSV content in request body
+ * @access Private (Admin)
+ */
+router.post("/import", authenticate, hasRoles("admin"), validate(importSubscribersSchema), subscriptionController.importSubscribers);
+
+/**
+ * @route POST /api/subscriptions/import/file
+ * @description Import subscribers from uploaded CSV file
+ * @access Private (Admin)
+ */
+router.post(
+  "/import/file",
+  authenticate,
+  hasRoles("admin"),
+  upload.single("file"),
+  handleMulterError,
+  subscriptionController.importSubscribersFromFile
+);
+
+/**
+ * @route GET /api/subscriptions/export/csv
+ * @description Export subscribers to CSV
+ * @access Private (Admin)
+ */
+router.get("/export/csv", authenticate, hasRoles("admin"), subscriptionController.exportSubscribers);
+
+// Tag-related routes for subscribers
+/**
+ * @route GET /api/subscriptions/tags
+ * @description Get all tags in the system
+ * @access Private (Admin)
+ */
+router.get("/tags", authenticate, hasRoles("admin"), subscriptionController.getAllTags);
+
+/**
+ * @route POST /api/subscriptions/by-tags
+ * @description Get subscribers by tags
+ * @access Private (Admin)
+ */
+router.post("/by-tags", authenticate, hasRoles("admin"), subscriptionController.getSubscribersByTags);
+
+/**
+ * @route GET /api/subscriptions/:id/tags
+ * @description Get all tags for a subscriber
+ * @access Private (Admin)
+ */
+router.get("/:id/tags", authenticate, hasRoles("admin"), validate(subscriberIdSchema), subscriptionController.getSubscriberTags);
+
+/**
+ * @route POST /api/subscriptions/:id/tags
+ * @description Add tags to a subscriber
+ * @access Private (Admin)
+ */
+router.post("/:id/tags", authenticate, hasRoles("admin"), validate(subscriberIdSchema), subscriptionController.addTagsToSubscriber);
+
+/**
+ * @route DELETE /api/subscriptions/:id/tags
+ * @description Remove tags from a subscriber
+ * @access Private (Admin)
+ */
+router.delete("/:id/tags", authenticate, hasRoles("admin"), validate(subscriberIdSchema), subscriptionController.removeTagsFromSubscriber);
+
+module.exports = router;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

@@ -1,5 +1,5 @@
 /**
- * @module routes/subscription
+ * @module Routes/Subscriptions
  * @description Routes for handling email subscription operations
  */
 const express = require("express");
@@ -90,5 +90,41 @@ router.post(
  * @access Private (Admin)
  */
 router.get("/export/csv", authenticate, hasRoles("admin"), subscriptionController.exportSubscribers);
+
+// Tag-related routes for subscribers
+/**
+ * @route GET /api/subscriptions/tags
+ * @description Get all tags in the system
+ * @access Private (Admin)
+ */
+router.get("/tags", authenticate, hasRoles("admin"), subscriptionController.getAllTags);
+
+/**
+ * @route POST /api/subscriptions/by-tags
+ * @description Get subscribers by tags
+ * @access Private (Admin)
+ */
+router.post("/by-tags", authenticate, hasRoles("admin"), subscriptionController.getSubscribersByTags);
+
+/**
+ * @route GET /api/subscriptions/:id/tags
+ * @description Get all tags for a subscriber
+ * @access Private (Admin)
+ */
+router.get("/:id/tags", authenticate, hasRoles("admin"), validate(subscriberIdSchema), subscriptionController.getSubscriberTags);
+
+/**
+ * @route POST /api/subscriptions/:id/tags
+ * @description Add tags to a subscriber
+ * @access Private (Admin)
+ */
+router.post("/:id/tags", authenticate, hasRoles("admin"), validate(subscriberIdSchema), subscriptionController.addTagsToSubscriber);
+
+/**
+ * @route DELETE /api/subscriptions/:id/tags
+ * @description Remove tags from a subscriber
+ * @access Private (Admin)
+ */
+router.delete("/:id/tags", authenticate, hasRoles("admin"), validate(subscriberIdSchema), subscriptionController.removeTagsFromSubscriber);
 
 module.exports = router;

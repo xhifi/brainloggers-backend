@@ -10,6 +10,8 @@ const s3Routes = require("./s3.routes");
 const subscriptionRoutes = require("./subscription.routes");
 const permissionRoutes = require("./permission.routes");
 const templateRoutes = require("./template.routes");
+const mailingListRoutes = require("./mailing-list.routes");
+const campaignRoutes = require("./campaign.routes");
 
 const router = express.Router();
 
@@ -19,6 +21,8 @@ router.use(`/storage`, s3Routes);
 router.use(`/subscriptions`, subscriptionRoutes);
 router.use(`/permissions`, permissionRoutes);
 router.use(`/templates`, templateRoutes);
+router.use(`/mailing-lists`, mailingListRoutes);
+router.use(`/campaigns`, campaignRoutes);
 
 /**
  * @route GET /api/health

@@ -1,6 +1,8 @@
 /**
  * @module services/user
  * @description Service for managing user accounts, authentication, and profile operations
+ * @category Services
+ * @subcategory User
  */
 const db = require("../config/db");
 const { hashPassword } = require("../utils/hash");
@@ -11,6 +13,7 @@ const crypto = require("crypto"); // For generating random tokens
  * Finds a user by their email address
  * @async
  * @function findUserByEmail
+ * @memberof module:services/user
  * @param {string} email - The email address to search for
  * @returns {Promise<Object|null>} User object with roles if found, null otherwise
  * @property {string} id - User's unique identifier
@@ -37,6 +40,7 @@ const findUserByEmail = async (email) => {
  * Finds a user by their ID
  * @async
  * @function findUserById
+ * @memberof module:services/user
  * @param {string} id - The user ID to search for
  * @returns {Promise<Object|null>} User object with roles if found, null otherwise
  * @property {string} id - User's unique identifier
@@ -62,6 +66,7 @@ const findUserById = async (id) => {
  * Creates a new user account
  * @async
  * @function createUser
+ * @memberof module:services/user
  * @param {string} email - The email address for the new user
  * @param {string} password - The plaintext password (will be hashed before storage)
  * @returns {Promise<Object>} The created user object
@@ -97,6 +102,7 @@ const createUser = async (name, email, password) => {
  * Verifies a user's email using the verification token
  * @async
  * @function verifyUser
+ * @memberof module:services/user
  * @param {string} token - The verification token sent to the user's email
  * @returns {Promise<Object|null>} The verified user object or null if token invalid/already used
  * @property {string} id - User's unique identifier
@@ -119,6 +125,7 @@ const verifyUser = async (token) => {
  * Sets a password reset token for a user
  * @async
  * @function setPasswordResetToken
+ * @memberof module:services/user
  * @param {string} userId - The ID of the user requesting password reset
  * @param {string} token - The generated reset token
  * @returns {Promise<Object>} User object if token was set
@@ -142,6 +149,7 @@ const setPasswordResetToken = async (userId, token) => {
  * Finds a user by their password reset token
  * @async
  * @function findUserByResetToken
+ * @memberof module:services/user
  * @param {string} token - The reset token to validate
  * @returns {Promise<Object|null>} User object if token valid and not expired, null otherwise
  * @property {string} id - User's unique identifier
@@ -163,6 +171,7 @@ const findUserByResetToken = async (token) => {
  * Resets a user's password
  * @async
  * @function resetPassword
+ * @memberof module:services/user
  * @param {string} userId - The ID of the user
  * @param {string} newPassword - The new plaintext password (will be hashed)
  * @returns {Promise<Object>} Updated user object

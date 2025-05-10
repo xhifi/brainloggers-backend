@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>dtos/permission.dto.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">dtos/permission.dto.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module dtos/permission
+ * @description Data Transfer Object schemas for permission operations
+ */
+const { z } = require("zod");
+
+// Schema for creating a new permission
+const createPermissionSchema = {
+  body: z.object({
+    resource: z
+      .string()
+      .min(1, "Resource name is required")
+      .regex(/^[a-zA-Z0-9_-]+$/, "Resource name must contain only alphanumeric characters, underscores and hyphens"),
+    action: z
+      .string()
+      .min(1, "Action name is required")
+      .regex(/^[a-zA-Z0-9_-]+$/, "Action name must contain only alphanumeric characters, underscores and hyphens"),
+    description: z.string().optional(),
+  }),
+};
+
+// Schema for updating a permission
+const updatePermissionSchema = {
+  params: z.object({
+    id: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Permission ID must be a number",
+      }),
+  }),
+  body: z
+    .object({
+      resource: z
+        .string()
+        .min(1, "Resource name is required")
+        .regex(/^[a-zA-Z0-9_-]+$/, "Resource name must contain only alphanumeric characters, underscores and hyphens")
+        .optional(),
+      action: z
+        .string()
+        .min(1, "Action name is required")
+        .regex(/^[a-zA-Z0-9_-]+$/, "Action name must contain only alphanumeric characters, underscores and hyphens")
+        .optional(),
+      description: z.string().optional(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+      message: "At least one field must be provided for update",
+    }),
+};
+
+// Schema for getting permissions by ID
+const permissionIdSchema = {
+  params: z.object({
+    id: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Permission ID must be a number",
+      }),
+  }),
+};
+
+// Schema for listing permissions with filtering
+const listPermissionsSchema = {
+  query: z.object({
+    resource: z.string().optional(),
+    search: z.string().optional(),
+  }),
+};
+
+// Schema for creating a new role
+const createRoleSchema = {
+  body: z.object({
+    name: z
+      .string()
+      .min(1, "Role name is required")
+      .max(50, "Role name cannot exceed 50 characters")
+      .regex(/^[a-zA-Z0-9_-]+$/, "Role name must contain only alphanumeric characters, underscores and hyphens"),
+    description: z.string().optional(),
+    permissionIds: z.array(z.number().int().positive("Permission ID must be a positive integer")).optional(),
+  }),
+};
+
+// Schema for updating a role
+const updateRoleSchema = {
+  params: z.object({
+    id: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Role ID must be a number",
+      }),
+  }),
+  body: z
+    .object({
+      name: z
+        .string()
+        .min(1, "Role name is required")
+        .max(50, "Role name cannot exceed 50 characters")
+        .regex(/^[a-zA-Z0-9_-]+$/, "Role name must contain only alphanumeric characters, underscores and hyphens")
+        .optional(),
+      description: z.string().optional(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+      message: "At least one field must be provided for update",
+    }),
+};
+
+// Schema for role ID
+const roleIdSchema = {
+  params: z.object({
+    id: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Role ID must be a number",
+      }),
+  }),
+};
+
+// Schema for assigning a permission to a role
+const assignPermissionSchema = {
+  params: z.object({
+    roleId: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Role ID must be a number",
+      }),
+  }),
+  body: z.object({
+    permissionId: z.number().int().positive("Permission ID must be a positive integer"),
+  }),
+};
+
+// Schema for removing a permission from a role
+const removePermissionSchema = {
+  params: z.object({
+    roleId: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Role ID must be a number",
+      }),
+    permissionId: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Permission ID must be a number",
+      }),
+  }),
+};
+
+// Schema for updating permissions for a role
+const updateRolePermissionsSchema = {
+  params: z.object({
+    roleId: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Role ID must be a number",
+      }),
+  }),
+  body: z.object({
+    permissionIds: z.array(z.number().int().positive("Permission ID must be a positive integer")),
+  }),
+};
+
+module.exports = {
+  createPermissionSchema,
+  updatePermissionSchema,
+  permissionIdSchema,
+  listPermissionsSchema,
+  createRoleSchema,
+  updateRoleSchema,
+  roleIdSchema,
+  assignPermissionSchema,
+  removePermissionSchema,
+  updateRolePermissionsSchema,
+};
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

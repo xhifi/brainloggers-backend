@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>services/template.service.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">services/template.service.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module services/template
+ * @description Service for managing email templates
+ * @category Services
+ * @subcategory Template
+ */
+const mjml2html = require("mjml");
+const { v4: uuidv4 } = require("uuid");
+const db = require("../config/db");
+const config = require("../config");
+const logger = require("./logger.service");
+const { NotFound } = require("../utils/errors");
+const s3Service = require("./s3.service");
+
+const TEMPLATE_FOLDER = "templates";
+const IMAGE_FOLDER = "images";
+
+/**
+ * Extract template variables from MJML content
+ * @function extractTemplateVariables
+ * @memberof module:services/template
+ * @param {string} mjmlContent - The MJML content
+ * @returns {Array} - Array of variable names
+ */
+const extractTemplateVariables = (mjmlContent) => {
+  const regex = /\{\{\s*([\w\.]+)\s*\}\}/g;
+  const variables = [];
+  let match;
+
+  while ((match = regex.exec(mjmlContent)) !== null) {
+    variables.push(match[1]);
+  }
+
+  return [...new Set(variables)]; // Return unique variables
+};
+
+/**
+ * Process MJML template and return HTML
+ * @function processMjmlToHtml
+ * @memberof module:services/template
+ * @param {string} mjmlContent - The MJML template content
+ * @returns {Object} - Object containing HTML output and errors if any
+ */
+const processMjmlToHtml = (mjmlContent) => {
+  try {
+    const result = mjml2html(mjmlContent, {
+      validationLevel: "strict",
+      filePath: __dirname,
+    });
+
+    return {
+      html: result.html,
+      errors: result.errors,
+    };
+  } catch (error) {
+    logger.error("Error processing MJML to HTML:", error);
+    throw new Error(`Error processing MJML: ${error.message}`);
+  }
+};
+
+/**
+ * Replace template variables with actual values
+ * @function processTemplateVariables
+ * @memberof module:services/template
+ * @param {string} template - The template content (HTML or MJML)
+ * @param {Object} variables - Object containing variable values
+ * @returns {string} - The processed template
+ */
+const processTemplateVariables = (template, variables) => {
+  let processed = template;
+
+  Object.entries(variables).forEach(([key, value]) => {
+    const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g");
+    processed = processed.replace(regex, value || "");
+  });
+
+  return processed;
+};
+
+/**
+ * Create a new email template
+ * @function createTemplate
+ * @memberof module:services/template
+ * @param {Object} templateData - Template data
+ * @param {string} userId - ID of the user creating the template
+ * @returns {Promise&lt;Object>} - Created template
+ */
+const createTemplate = async (templateData, userId) => {
+  const { name, description, category, mjmlSource } = templateData;
+  let templateVariables = templateData.templateVariables;
+
+  // Extract variables if not provided
+  if (!templateVariables || templateVariables.length === 0) {
+    templateVariables = extractTemplateVariables(mjmlSource);
+  }
+
+  // Process MJML to HTML
+  const { html, errors } = processMjmlToHtml(mjmlSource);
+
+  if (errors &amp;&amp; errors.length > 0) {
+    logger.warn("MJML processing had errors:", errors);
+  }
+
+  // Generate unique folder name for this template
+  const templateId = uuidv4();
+  const templateFolder = `${TEMPLATE_FOLDER}/template-${templateId}`;
+
+  // Create file objects for S3 upload with the specified file names
+  const mjmlFile = {
+    buffer: Buffer.from(mjmlSource),
+    mimetype: "text/plain",
+    originalname: "src.mjml",
+    size: Buffer.byteLength(mjmlSource),
+  };
+
+  const htmlFile = {
+    buffer: Buffer.from(html),
+    mimetype: "text/html",
+    originalname: "output.html",
+    size: Buffer.byteLength(html),
+  };
+
+  // Upload MJML and HTML to S3 using s3Service
+  const mjmlUploadResult = await s3Service.uploadFile(mjmlFile, templateFolder);
+  const htmlUploadResult = await s3Service.uploadFile(htmlFile, templateFolder);
+
+  const mjmlKey = mjmlUploadResult.key;
+  const htmlKey = htmlUploadResult.key;
+
+  // Save to database
+  const query = `
+    INSERT INTO email_templates (
+      name, description, category, mjml_s3_key, html_s3_key, 
+      template_variables, s3_assets_path, created_by, updated_by
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $8
+    ) RETURNING *
+  `;
+
+  const values = [name, description || null, category || null, mjmlKey, htmlKey, JSON.stringify(templateVariables), templateFolder, userId];
+
+  try {
+    const result = await db.query(query, values);
+    return transformTemplateFromDb(result.rows[0]);
+  } catch (error) {
+    logger.error("Error creating template:", error);
+    throw error;
+  }
+};
+
+/**
+ * Update an existing email template
+ * @function updateTemplate
+ * @memberof module:services/template
+ * @param {number} id - Template ID
+ * @param {Object} templateData - Updated template data
+ * @param {string} userId - ID of the user updating the template
+ * @returns {Promise&lt;Object>} - Updated template
+ */
+const updateTemplate = async (id, templateData, userId) => {
+  // Get existing template
+  const existingTemplate = await getTemplateById(id);
+  if (!existingTemplate) {
+    throw new NotFound("Template not found");
+  }
+
+  let updateFields = [];
+  let values = [];
+  let paramCount = 1;
+
+  // Process all possible update fields
+  if (templateData.name !== undefined) {
+    updateFields.push(`name = $${paramCount++}`);
+    values.push(templateData.name);
+  }
+
+  if (templateData.description !== undefined) {
+    updateFields.push(`description = $${paramCount++}`);
+    values.push(templateData.description);
+  }
+
+  if (templateData.category !== undefined) {
+    updateFields.push(`category = $${paramCount++}`);
+    values.push(templateData.category);
+  }
+
+  if (templateData.isActive !== undefined) {
+    updateFields.push(`is_active = $${paramCount++}`);
+    values.push(templateData.isActive);
+  }
+
+  // If MJML source is provided, reprocess and update S3 files
+  if (templateData.mjmlSource) {
+    const mjmlSource = templateData.mjmlSource;
+    const { html } = processMjmlToHtml(mjmlSource);
+
+    // Extract variables if not provided
+    const templateVariables = templateData.templateVariables || extractTemplateVariables(mjmlSource);
+
+    // Create file objects for S3 update with the specified file names
+    const mjmlFile = {
+      buffer: Buffer.from(mjmlSource),
+      mimetype: "text/plain",
+      originalname: "src.mjml", // Use the standardized naming convention
+      size: Buffer.byteLength(mjmlSource),
+    };
+
+    const htmlFile = {
+      buffer: Buffer.from(html),
+      mimetype: "text/html",
+      originalname: "output.html", // Use the standardized naming convention
+      size: Buffer.byteLength(html),
+    };
+
+    // Update MJML and HTML in S3 using s3Service
+    await s3Service.updateFile(existingTemplate.mjmlS3Key, mjmlFile);
+    await s3Service.updateFile(existingTemplate.htmlS3Key, htmlFile);
+
+    // Update template_variables in database
+    updateFields.push(`template_variables = $${paramCount++}`);
+    values.push(JSON.stringify(templateVariables));
+  } else if (templateData.templateVariables) {
+    updateFields.push(`template_variables = $${paramCount++}`);
+    values.push(JSON.stringify(templateData.templateVariables));
+  }
+
+  // Add updated_by and updated_at
+  updateFields.push(`updated_by = $${paramCount++}`);
+  values.push(userId);
+
+  updateFields.push(`updated_at = NOW()`);
+
+  // Update the database
+  const query = `
+    UPDATE email_templates 
+    SET ${updateFields.join(", ")} 
+    WHERE id = $${paramCount++} 
+    RETURNING *
+  `;
+
+  values.push(id);
+
+  try {
+    const result = await db.query(query, values);
+    if (result.rows.length === 0) {
+      throw new NotFound("Template not found");
+    }
+    return transformTemplateFromDb(result.rows[0]);
+  } catch (error) {
+    logger.error(`Error updating template ${id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Delete a template (soft delete)
+ * @function deleteTemplate
+ * @memberof module:services/template
+ * @param {number} id - Template ID
+ * @returns {Promise&lt;boolean>} - Success status
+ */
+const deleteTemplate = async (id) => {
+  const query = `
+    UPDATE email_templates 
+    SET is_deleted = true, updated_at = NOW() 
+    WHERE id = $1 AND is_deleted = false 
+    RETURNING id
+  `;
+
+  try {
+    const result = await db.query(query, [id]);
+    if (result.rows.length === 0) {
+      throw new NotFound("Template not found or already deleted");
+    }
+    return true;
+  } catch (error) {
+    logger.error(`Error deleting template ${id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get template by ID
+ * @function getTemplateById
+ * @memberof module:services/template
+ * @param {number} id - Template ID
+ * @returns {Promise&lt;Object>} - Template data
+ */
+const getTemplateById = async (id) => {
+  const query = `
+    SELECT * FROM email_templates 
+    WHERE id = $1 AND is_deleted = false
+  `;
+
+  try {
+    const result = await db.query(query, [id]);
+    if (result.rows.length === 0) {
+      throw new NotFound("Template not found");
+    }
+    return transformTemplateFromDb(result.rows[0]);
+  } catch (error) {
+    logger.error(`Error getting template ${id}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * List templates with pagination and filtering
+ * @function listTemplates
+ * @memberof module:services/template
+ * @param {Object} options - Filter and pagination options
+ * @returns {Promise&lt;Object>} - Paginated template list
+ */
+const listTemplates = async (options = {}) => {
+  const { page = 1, limit = 10, category, search, isActive } = options;
+
+  const offset = (page - 1) * limit;
+  const params = [];
+  let paramCount = 1;
+
+  let whereConditions = ["is_deleted = false"];
+
+  if (category) {
+    whereConditions.push(`category = $${paramCount++}`);
+    params.push(category);
+  }
+
+  if (search) {
+    whereConditions.push(`(name ILIKE $${paramCount} OR description ILIKE $${paramCount})`);
+    params.push(`%${search}%`);
+    paramCount++;
+  }
+
+  if (isActive !== undefined) {
+    whereConditions.push(`is_active = $${paramCount++}`);
+    params.push(isActive);
+  }
+
+  const whereClause = whereConditions.length ? "WHERE " + whereConditions.join(" AND ") : "";
+
+  // Count query for pagination
+  const countQuery = `
+    SELECT COUNT(*) as total
+    FROM email_templates
+    ${whereClause}
+  `;
+
+  // Data query with pagination
+  const dataQuery = `
+    SELECT *
+    FROM email_templates
+    ${whereClause}
+    ORDER BY created_at DESC
+    LIMIT $${paramCount++} OFFSET $${paramCount++}
+  `;
+
+  params.push(limit, offset);
+
+  try {
+    const countResult = await db.query(countQuery, params.slice(0, paramCount - 3));
+    const dataResult = await db.query(dataQuery, params);
+
+    const total = parseInt(countResult.rows[0].total);
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data: dataResult.rows.map(transformTemplateFromDb),
+      pagination: {
+        total,
+        totalPages,
+        currentPage: page,
+        limit,
+      },
+    };
+  } catch (error) {
+    logger.error("Error listing templates:", error);
+    throw error;
+  }
+};
+
+/**
+ * Upload a template image to S3
+ * @function uploadTemplateImage
+ * @memberof module:services/template
+ * @param {Object} file - Uploaded file object from multer
+ * @param {string} templateId - ID of the template to associate the image with
+ * @param {string} userId - User ID of uploader
+ * @returns {Promise&lt;Object>} - Upload result with URL
+ */
+const uploadTemplateImage = async (file, templateId, userId) => {
+  if (!file) {
+    throw new Error("No file provided");
+  }
+
+  if (!templateId) {
+    throw new Error("Template ID is required");
+  }
+
+  // Get template to verify it exists and to get its folder path
+  const template = await getTemplateById(templateId);
+  if (!template) {
+    throw new NotFound("Template not found");
+  }
+
+  const uniqueId = uuidv4();
+  const fileExtension = file.originalname.split(".").pop();
+
+  // Create image folder path within the template's folder
+  const imagesFolder = `${template.s3AssetsPath}/images`;
+
+  // Create a file object with unique filename
+  const imageFile = {
+    ...file,
+    originalname: `${uniqueId}.${fileExtension}`,
+  };
+
+  try {
+    // Upload the file using s3Service to the template's images folder
+    const uploadResult = await s3Service.uploadFile(imageFile, imagesFolder);
+
+    // Get a presigned URL with 24-hour expiry
+    const fileResult = await s3Service.getFile(uploadResult.key, true);
+
+    return {
+      url: fileResult.presignedUrl,
+      key: uploadResult.key,
+      filename: file.originalname,
+      size: file.size,
+      mimetype: file.mimetype,
+      templateId: templateId,
+    };
+  } catch (error) {
+    logger.error("Error uploading template image:", error);
+    throw error;
+  }
+};
+
+/**
+ * Transform database row to template object
+ * @function transformTemplateFromDb
+ * @memberof module:services/template
+ * @param {Object} dbTemplate - Template row from database
+ * @returns {Object} - Transformed template object
+ */
+const transformTemplateFromDb = (dbTemplate) => {
+  if (!dbTemplate) return null;
+
+  return {
+    id: dbTemplate.id,
+    name: dbTemplate.name,
+    description: dbTemplate.description,
+    category: dbTemplate.category,
+    mjmlS3Key: dbTemplate.mjml_s3_key,
+    htmlS3Key: dbTemplate.html_s3_key,
+    templateVariables: dbTemplate.template_variables
+      ? typeof dbTemplate.template_variables === "string"
+        ? JSON.parse(dbTemplate.template_variables)
+        : dbTemplate.template_variables
+      : [],
+    s3AssetsPath: dbTemplate.s3_assets_path,
+    hasAttachments: dbTemplate.has_attachments,
+    isActive: dbTemplate.is_active,
+    createdBy: dbTemplate.created_by,
+    updatedBy: dbTemplate.updated_by,
+    createdAt: dbTemplate.created_at,
+    updatedAt: dbTemplate.updated_at,
+  };
+};
+
+/**
+ * Render template with variable substitution
+ * @function renderTemplate
+ * @memberof module:services/template
+ * @param {number} templateId - Template ID
+ * @param {Object} variables - Variables to substitute
+ * @returns {Promise&lt;string>} - Rendered HTML
+ */
+const renderTemplate = async (templateId, variables = {}) => {
+  const template = await getTemplateById(templateId);
+
+  if (!template) {
+    throw new NotFound("Template not found");
+  }
+
+  try {
+    // Get HTML from S3 using s3Service
+    const fileResult = await s3Service.getFile(template.htmlS3Key);
+    const html = fileResult.content.toString("utf8");
+
+    // Replace variables
+    return processTemplateVariables(html, variables);
+  } catch (error) {
+    logger.error(`Error rendering template ${templateId}:`, error);
+    throw new Error(`Error rendering template: ${error.message}`);
+  }
+};
+
+module.exports = {
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  getTemplateById,
+  listTemplates,
+  uploadTemplateImage,
+  renderTemplate,
+  processTemplateVariables,
+  extractTemplateVariables,
+};
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

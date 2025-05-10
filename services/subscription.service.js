@@ -50,6 +50,7 @@ const subscribe = async ({ email, name, dateOfBirth, metadata = {} }) => {
  */
 const unsubscribe = async (email) => {
   try {
+    console.log(email);
     const sql = `
       UPDATE subscribers
       SET is_active = false, unsubscribed_at = NOW(), updated_at = NOW()
@@ -60,6 +61,7 @@ const unsubscribe = async (email) => {
     const { rows } = await db.query(sql, [email]);
     return rows[0] || null;
   } catch (error) {
+    console.log(error);
     logger.error("Error unsubscribing email:", { error, email });
     throw new Error("Failed to unsubscribe email");
   }
@@ -446,45 +448,280 @@ const exportSubscribersToCSV = async (filters = {}) => {
   }
 };
 
-// Helper functions
-function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
+/**
+ * Add tags to a subscriber
+ * @async
+ * @function addTagsToSubscriber
+ * @param {number} subscriberId - Subscriber ID
+ * @param {Array<string>} tagNames - Array of tag names to add
+ * @returns {Promise<Array>} Array of added tags
+ * @throws {Error} If database error occurs
+ */
+const addTagsToSubscriber = async (subscriberId, tagNames) => {
+  try {
+    // Begin transaction
+    await db.query("BEGIN");
 
-function formatDate(date) {
-  if (!date) return "";
-  return new Date(date).toISOString().split("T")[0];
-}
+    const addedTags = [];
 
-function buildWhereClause({ search, isActive }) {
-  const conditions = [];
+    // Process each tag name
+    for (const tagName of tagNames) {
+      // Check if tag exists, if not create it
+      const tagResult = await db.query(
+        `INSERT INTO tags (name)
+         VALUES ($1)
+         ON CONFLICT (name) DO UPDATE SET name = $1
+         RETURNING id, name`,
+        [tagName]
+      );
 
-  if (search) {
-    conditions.push(`(email ILIKE $1 OR name ILIKE $1)`);
+      const tagId = tagResult.rows[0].id;
+
+      // Add relation between subscriber and tag if it doesn't exist
+      await db.query(
+        `INSERT INTO subscriber_tags (subscriber_id, tag_id)
+         VALUES ($1, $2)
+         ON CONFLICT (subscriber_id, tag_id) DO NOTHING`,
+        [subscriberId, tagId]
+      );
+
+      addedTags.push(tagResult.rows[0]);
+    }
+
+    // Commit transaction
+    await db.query("COMMIT");
+
+    return addedTags;
+  } catch (error) {
+    // Rollback transaction on error
+    await db.query("ROLLBACK");
+    logger.error("Error adding tags to subscriber:", { error, subscriberId, tagNames });
+    throw new Error(`Failed to add tags to subscriber: ${error.message}`);
   }
+};
 
-  if (isActive !== undefined) {
-    const paramIndex = search ? 2 : 1;
-    conditions.push(`is_active = $${paramIndex}`);
+/**
+ * Remove tags from a subscriber
+ * @async
+ * @function removeTagsFromSubscriber
+ * @param {number} subscriberId - Subscriber ID
+ * @param {Array<string>} tagNames - Array of tag names to remove
+ * @returns {Promise<number>} Number of tags removed
+ * @throws {Error} If database error occurs
+ */
+const removeTagsFromSubscriber = async (subscriberId, tagNames) => {
+  try {
+    if (!tagNames || tagNames.length === 0) {
+      return 0;
+    }
+
+    const placeholders = tagNames.map((_, index) => `$${index + 2}`).join(", ");
+
+    const result = await db.query(
+      `DELETE FROM subscriber_tags
+       WHERE subscriber_id = $1
+       AND tag_id IN (
+         SELECT id FROM tags WHERE name IN (${placeholders})
+       )
+       RETURNING tag_id`,
+      [subscriberId, ...tagNames]
+    );
+
+    return result.rowCount;
+  } catch (error) {
+    logger.error("Error removing tags from subscriber:", { error, subscriberId, tagNames });
+    throw new Error(`Failed to remove tags from subscriber: ${error.message}`);
   }
+};
 
-  return conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-}
+/**
+ * Get all tags for a subscriber
+ * @async
+ * @function getSubscriberTags
+ * @param {number} subscriberId - Subscriber ID
+ * @returns {Promise<Array>} Array of tags
+ * @throws {Error} If database error occurs
+ */
+const getSubscriberTags = async (subscriberId) => {
+  try {
+    const sql = `
+      SELECT t.id, t.name
+      FROM tags t
+      JOIN subscriber_tags st ON t.id = st.tag_id
+      WHERE st.subscriber_id = $1
+      ORDER BY t.name ASC
+    `;
 
-function buildWhereParams({ search, isActive }) {
-  const params = [];
-
-  if (search) {
-    params.push(`%${search}%`);
+    const { rows } = await db.query(sql, [subscriberId]);
+    return rows;
+  } catch (error) {
+    logger.error("Error fetching subscriber tags:", { error, subscriberId });
+    throw new Error(`Failed to fetch subscriber tags: ${error.message}`);
   }
+};
 
-  if (isActive !== undefined) {
-    params.push(isActive);
+/**
+ * Get all unique tags in the system
+ * @async
+ * @function getAllTags
+ * @param {Object} options - Query options
+ * @param {string} [options.search] - Search term for tag name
+ * @returns {Promise<Array>} Array of tags with usage count
+ * @throws {Error} If database error occurs
+ */
+const getAllTags = async ({ search = null } = {}) => {
+  try {
+    let sql = `
+      SELECT t.id, t.name, COUNT(st.subscriber_id) as usage_count
+      FROM tags t
+      LEFT JOIN subscriber_tags st ON t.id = st.tag_id
+    `;
+
+    const params = [];
+
+    if (search) {
+      sql += ` WHERE t.name ILIKE $1`;
+      params.push(`%${search}%`);
+    }
+
+    sql += `
+      GROUP BY t.id, t.name
+      ORDER BY t.name ASC
+    `;
+
+    const { rows } = await db.query(sql, params);
+    return rows;
+  } catch (error) {
+    logger.error("Error fetching all tags:", { error });
+    throw new Error(`Failed to fetch tags: ${error.message}`);
   }
+};
 
-  return params;
-}
+/**
+ * Get subscribers by tags
+ * @async
+ * @function getSubscribersByTags
+ * @param {Array<string>} tagNames - Array of tag names to filter by
+ * @param {Object} options - Query options
+ * @param {number} [options.page=1] - Page number
+ * @param {number} [options.limit=10] - Records per page
+ * @param {string} [options.matchType='any'] - Match type: 'any' or 'all'
+ * @returns {Promise<Object>} Paginated subscribers with count
+ * @throws {Error} If database error occurs
+ */
+const getSubscribersByTags = async (tagNames, { page = 1, limit = 10, matchType = "any", isActive } = {}) => {
+  try {
+    if (!tagNames || tagNames.length === 0) {
+      return {
+        subscribers: [],
+        pagination: {
+          total: 0,
+          page,
+          limit,
+          pages: 0,
+        },
+      };
+    }
+
+    const offset = (page - 1) * limit;
+    const params = [...tagNames];
+
+    // Build WHERE clause for active status
+    let activeCondition = "";
+    if (isActive !== undefined) {
+      activeCondition = "AND s.is_active = $" + (params.length + 1);
+      params.push(isActive);
+    }
+
+    // Different query based on match type
+    let sql;
+    let countSql;
+
+    if (matchType === "all") {
+      // Match subscribers who have ALL the specified tags
+      sql = `
+        SELECT 
+          s.id, s.email, s.name, s.date_of_birth, 
+          s.is_active, s.subscribed_at, s.unsubscribed_at, s.metadata
+        FROM subscribers s
+        JOIN (
+          SELECT subscriber_id
+          FROM subscriber_tags st
+          JOIN tags t ON st.tag_id = t.id
+          WHERE t.name = ANY($1::text[])
+          ${activeCondition}
+          GROUP BY subscriber_id
+          HAVING COUNT(DISTINCT t.name) = $${params.length + 1}
+        ) matching_subscribers ON s.id = matching_subscribers.subscriber_id
+        ORDER BY s.name ASC
+        LIMIT $${params.length + 2} OFFSET $${params.length + 3}
+      `;
+
+      countSql = `
+        SELECT COUNT(*) AS total
+        FROM (
+          SELECT subscriber_id
+          FROM subscriber_tags st
+          JOIN tags t ON st.tag_id = t.id
+          WHERE t.name = ANY($1::text[])
+          GROUP BY subscriber_id
+          HAVING COUNT(DISTINCT t.name) = $${params.length + 1}
+        ) matching_subscribers
+        JOIN subscribers s ON s.id = matching_subscribers.subscriber_id
+        WHERE 1=1 ${activeCondition}
+      `;
+
+      params.push(tagNames.length);
+    } else {
+      // Default: Match subscribers who have ANY of the specified tags
+      sql = `
+        SELECT DISTINCT
+          s.id, s.email, s.name, s.date_of_birth, 
+          s.is_active, s.subscribed_at, s.unsubscribed_at, s.metadata
+        FROM subscribers s
+        JOIN subscriber_tags st ON s.id = st.subscriber_id
+        JOIN tags t ON st.tag_id = t.id
+        WHERE t.name = ANY($1::text[])
+        ${activeCondition}
+        ORDER BY s.name ASC
+        LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `;
+
+      countSql = `
+        SELECT COUNT(DISTINCT s.id) AS total
+        FROM subscribers s
+        JOIN subscriber_tags st ON s.id = st.subscriber_id
+        JOIN tags t ON st.tag_id = t.id
+        WHERE t.name = ANY($1::text[])
+        ${activeCondition}
+      `;
+    }
+
+    // Append limit and offset params
+    params.push(limit, offset);
+
+    const [resultsQuery, countQuery] = await Promise.all([
+      db.query(sql, params),
+      db.query(countSql, params.slice(0, params.length - 2)), // Remove limit and offset
+    ]);
+
+    const subscribers = resultsQuery.rows;
+    const total = parseInt(countQuery.rows[0].total);
+
+    return {
+      subscribers,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  } catch (error) {
+    logger.error("Error fetching subscribers by tags:", { error, tagNames });
+    throw new Error(`Failed to fetch subscribers by tags: ${error.message}`);
+  }
+};
 
 module.exports = {
   subscribe,
@@ -496,4 +733,9 @@ module.exports = {
   deleteSubscriber,
   importSubscribersFromCSV,
   exportSubscribersToCSV,
+  addTagsToSubscriber,
+  removeTagsFromSubscriber,
+  getSubscriberTags,
+  getAllTags,
+  getSubscribersByTags,
 };

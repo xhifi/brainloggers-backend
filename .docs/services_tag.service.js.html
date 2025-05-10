@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>services/tag.service.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">services/tag.service.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const db = require("../config/db");
+const { NotFound } = require("../utils/errors");
+
+class TagService {
+  /**
+   * Create a new tag
+   * @param {Object} tagData - Tag data object
+   * @returns {Promise&lt;Object>} Created tag
+   */
+  async createTag(tagData) {
+    const result = await db.query(
+      `INSERT INTO tags(name, description) 
+       VALUES($1, $2) 
+       RETURNING *`,
+      [tagData.name, tagData.description]
+    );
+
+    return result.rows[0];
+  }
+
+  /**
+   * Get all tags
+   * @returns {Promise&lt;Array>} List of all tags
+   */
+  async getAllTags() {
+    const result = await db.query("SELECT * FROM tags ORDER BY name");
+    return result.rows;
+  }
+
+  /**
+   * Get tag by ID
+   * @param {number} tagId - Tag ID
+   * @returns {Promise&lt;Object>} Tag object
+   */
+  async getTagById(tagId) {
+    const result = await db.query("SELECT * FROM tags WHERE id = $1", [tagId]);
+
+    if (result.rows.length === 0) {
+      throw new NotFound(`Tag with ID ${tagId} not found`);
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Update tag
+   * @param {number} tagId - Tag ID to update
+   * @param {Object} tagData - Updated tag data
+   * @returns {Promise&lt;Object>} Updated tag
+   */
+  async updateTag(tagId, tagData) {
+    // First check if tag exists
+    await this.getTagById(tagId);
+
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (tagData.name !== undefined) {
+      fields.push(`name = $${paramIndex}`);
+      values.push(tagData.name);
+      paramIndex++;
+    }
+
+    if (tagData.description !== undefined) {
+      fields.push(`description = $${paramIndex}`);
+      values.push(tagData.description);
+      paramIndex++;
+    }
+
+    fields.push(`updated_at = CURRENT_TIMESTAMP`);
+
+    const result = await db.query(
+      `UPDATE tags 
+       SET ${fields.join(", ")} 
+       WHERE id = $${paramIndex} 
+       RETURNING *`,
+      [...values, tagId]
+    );
+
+    return result.rows[0];
+  }
+
+  /**
+   * Delete tag by ID
+   * @param {number} tagId - Tag ID to delete
+   * @returns {Promise&lt;void>}
+   */
+  async deleteTag(tagId) {
+    // First check if tag exists
+    await this.getTagById(tagId);
+
+    const result = await db.query("DELETE FROM tags WHERE id = $1 RETURNING id", [tagId]);
+    return result.rows[0];
+  }
+
+  /**
+   * Assign tag to subscribers
+   * @param {number} tagId - Tag ID
+   * @param {Array&lt;number>} subscriberIds - Array of subscriber IDs
+   * @returns {Promise&lt;Object>} Number of subscribers tagged
+   */
+  async assignTagToSubscribers(tagId, subscriberIds) {
+    // First check if tag exists
+    await this.getTagById(tagId);
+
+    // Create values for bulk insert
+    const values = subscriberIds.map((id) => `(${id}, ${tagId})`).join(", ");
+
+    if (!values.length) {
+      return { count: 0 };
+    }
+
+    const result = await db.query(`
+      INSERT INTO subscriber_tags (subscriber_id, tag_id)
+      VALUES ${values}
+      ON CONFLICT (subscriber_id, tag_id) DO NOTHING
+      RETURNING subscriber_id
+    `);
+
+    return { count: result.rows.length };
+  }
+
+  /**
+   * Remove tag from subscribers
+   * @param {number} tagId - Tag ID
+   * @param {Array&lt;number>} subscriberIds - Array of subscriber IDs
+   * @returns {Promise&lt;Object>} Number of untagged subscribers
+   */
+  async removeTagFromSubscribers(tagId, subscriberIds) {
+    // First check if tag exists
+    await this.getTagById(tagId);
+
+    if (!subscriberIds.length) {
+      return { count: 0 };
+    }
+
+    const subscriberIdPlaceholders = subscriberIds.map((_, idx) => `$${idx + 2}`).join(", ");
+
+    const result = await db.query(
+      `
+      DELETE FROM subscriber_tags
+      WHERE tag_id = $1 AND subscriber_id IN (${subscriberIdPlaceholders})
+      RETURNING subscriber_id
+    `,
+      [tagId, ...subscriberIds]
+    );
+
+    return { count: result.rows.length };
+  }
+
+  /**
+   * Get subscribers by tag ID
+   * @param {number} tagId - Tag ID
+   * @returns {Promise&lt;Array>} List of subscribers with this tag
+   */
+  async getSubscribersByTag(tagId) {
+    // First check if tag exists
+    await this.getTagById(tagId);
+
+    const result = await db.query(
+      `
+      SELECT s.* FROM subscribers s
+      JOIN subscriber_tags st ON s.id = st.subscriber_id
+      WHERE st.tag_id = $1
+    `,
+      [tagId]
+    );
+
+    return result.rows;
+  }
+
+  /**
+   * Get tags for a subscriber
+   * @param {number} subscriberId - Subscriber ID
+   * @returns {Promise&lt;Array>} List of tags for this subscriber
+   */
+  async getTagsBySubscriber(subscriberId) {
+    // First check if subscriber exists
+    const checkSubscriber = await db.query("SELECT id FROM subscribers WHERE id = $1", [subscriberId]);
+
+    if (checkSubscriber.rows.length === 0) {
+      throw new NotFound(`Subscriber with ID ${subscriberId} not found`);
+    }
+
+    const result = await db.query(
+      `
+      SELECT t.* FROM tags t
+      JOIN subscriber_tags st ON t.id = st.tag_id
+      WHERE st.subscriber_id = $1
+      ORDER BY t.name
+    `,
+      [subscriberId]
+    );
+
+    return result.rows;
+  }
+}
+
+module.exports = new TagService();
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

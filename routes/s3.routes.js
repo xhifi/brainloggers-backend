@@ -1,5 +1,5 @@
 /**
- * @module routes/s3.routes
+ * @module Routes/Storage
  * @description Routes for S3 file and folder operations
  */
 const express = require("express");

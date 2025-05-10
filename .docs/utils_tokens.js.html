@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>utils/tokens.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">utils/tokens.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module utils/tokens
+ * @description Utility functions for JWT token generation, verification and handling
+ */
+const jwt = require("jsonwebtoken");
+const config = require("../config");
+const { v4: uuidv4 } = require("uuid"); // For opaque refresh tokens if needed
+
+/**
+ * Generates a JWT access token for authenticated users
+ * @function generateAccessToken
+ * @param {Object} user - User object containing authentication and authorization data
+ * @param {string} user.id - Unique identifier for the user
+ * @param {Array&lt;string>} [user.roles=[]] - User's assigned roles for authorization
+ * @returns {string} JWT access token
+ * @throws {Error} If JWT_SECRET is not configured
+ */
+const generateAccessToken = (user) => {
+  // Include essential, non-sensitive info
+  const payload = {
+    userId: user.id,
+    // email: user.email, // Avoid including PII unless absolutely necessary
+    roles: user.roles || [], // Ensure roles are included if fetched during login/refresh
+  };
+  if (!config.jwt.secret) {
+    throw new Error("JWT_SECRET is not defined in environment variables.");
+  }
+  return jwt.sign(payload, config.jwt.secret, { expiresIn: config.jwt.accessExpiration });
+};
+
+/**
+ * Generates an opaque refresh token using UUID
+ * @function generateOpaqueRefreshToken
+ * @returns {string} UUID v4 string to be used as refresh token
+ */
+const generateOpaqueRefreshToken = () => {
+  return uuidv4();
+};
+
+/**
+ * Verifies a JWT access token
+ * @function verifyToken
+ * @param {string} token - JWT token to verify
+ * @returns {Object} Decoded token payload if verification succeeds
+ * @throws {jwt.TokenExpiredError} If token has expired
+ * @throws {jwt.JsonWebTokenError} If token is invalid
+ * @throws {Error} If JWT_SECRET is not configured
+ */
+const verifyToken = (token) => {
+  if (!config.jwt.secret) {
+    throw new Error("JWT_SECRET is not defined in environment variables.");
+  }
+  try {
+    // Explicitly define algorithms to prevent algorithm switching attacks
+    return jwt.verify(token, config.jwt.secret); // Assuming HS256 is your algorithm
+  } catch (error) {
+    // Let the caller handle specific JWT errors (Expired, Invalid)
+    throw error;
+  }
+};
+
+/**
+ * Decodes a JWT token without verification (useful for expired tokens)
+ * @function decodeToken
+ * @param {string} token - JWT token to decode
+ * @returns {Object|null} Decoded token payload or null if decoding fails
+ */
+const decodeToken = (token) => {
+  try {
+    return jwt.decode(token);
+  } catch (error) {
+    console.error("Failed to decode token:", error);
+    return null;
+  }
+};
+
+module.exports = { generateAccessToken, generateOpaqueRefreshToken, verifyToken, decodeToken };
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

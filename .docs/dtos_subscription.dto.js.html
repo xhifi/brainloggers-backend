@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>dtos/subscription.dto.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">dtos/subscription.dto.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module dtos/subscription
+ * @description Data Transfer Object schemas for subscription operations
+ */
+const { z } = require("zod");
+const path = require("path");
+
+// Schema for subscribing
+const subscribeSchema = {
+  body: z.object({
+    email: z
+      .string()
+      .trim()
+      .email("Valid email is required")
+      .transform((val) => val.toLowerCase()), // Normalize email
+    name: z.string().max(255, { message: "Name can be maximum 255 characters long" }).optional(),
+    dateOfBirth: z
+      .string()
+      .optional()
+      .refine((val) => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), { message: "Date of birth must be in YYYY-MM-DD format" }),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+};
+
+// Schema for unsubscribing
+const unsubscribeSchema = {
+  body: z.object({
+    email: z
+      .string()
+      .trim()
+      .email("Valid email is required")
+      .transform((val) => val.toLowerCase()), // Normalize email
+  }),
+};
+
+// Schema for single subscriber management (get, update, delete)
+const subscriberIdSchema = {
+  params: z.object({
+    id: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Subscriber ID must be a number",
+      }),
+  }),
+};
+
+// Schema for updating subscriber
+const updateSubscriberSchema = {
+  params: z.object({
+    id: z
+      .string()
+      .trim()
+      .refine((val) => !isNaN(parseInt(val)), {
+        message: "Subscriber ID must be a number",
+      }),
+  }),
+  body: z.object({
+    email: z
+      .string()
+      .trim()
+      .email("Valid email is required")
+      .transform((val) => val.toLowerCase())
+      .optional(), // Normalize email
+    name: z.string().max(255, { message: "Name can be maximum 255 characters long" }).optional(),
+    dateOfBirth: z
+      .string()
+      .optional()
+      .refine((val) => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), { message: "Date of birth must be in YYYY-MM-DD format" }),
+    isActive: z.boolean().optional(),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+};
+
+// Schema for batch import subscribers (CSV content in request body)
+const importSubscribersSchema = {
+  body: z.object({
+    subscribers: z.array(
+      z.object({
+        email: z
+          .string()
+          .trim()
+          .email("Valid email is required")
+          .transform((val) => val.toLowerCase()),
+        name: z.string().max(255).optional(),
+        dateOfBirth: z
+          .string()
+          .optional()
+          .refine((val) => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), { message: "Date of birth must be in YYYY-MM-DD format" }),
+        metadata: z.record(z.string(), z.any()).optional(),
+      })
+    ),
+  }),
+};
+
+// Schema for CSV file upload
+const csvFileSchema = {
+  file: z.any().refine(
+    (file) => {
+      return file &amp;&amp; file.originalname &amp;&amp; path.extname(file.originalname).toLowerCase() === ".csv";
+    },
+    {
+      message: "Only CSV files are allowed",
+    }
+  ),
+};
+
+// Schema for getting subscribers with search and pagination
+const getSubscribersSchema = {
+  query: z.object({
+    page: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 1)),
+    limit: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 10)),
+    search: z.string().optional(),
+    isActive: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (val === "true") return true;
+        if (val === "false") return false;
+        return undefined;
+      }),
+    sortBy: z.string().optional(),
+    sortOrder: z.enum(["asc", "desc"]).optional(),
+  }),
+};
+
+/**
+ * Tags validation schemas using Zod
+ */
+
+/**
+ * Add tags to subscriber schema
+ */
+const addTagsSchema = {
+  body: z.object({
+    tags: z.array(z.string().trim().min(1).max(50)).min(1, "At least one tag is required"),
+  }),
+};
+
+/**
+ * Remove tags from subscriber schema
+ */
+const removeTagsSchema = {
+  body: z.object({
+    tags: z.array(z.string().trim().min(1).max(50)).min(1, "At least one tag is required"),
+  }),
+};
+
+/**
+ * Get subscribers by tags schema
+ */
+const getByTagsSchema = {
+  query: z.object({
+    tags: z.array(z.string().trim().min(1).max(50)).min(1, "At least one tag is required"),
+    matchType: z.enum(["any", "all"]).default("any"),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(100).default(10),
+    isActive: z.boolean().optional(),
+  }),
+};
+
+/**
+ * Get all tags schema
+ */
+const getAllTagsSchema = {
+  query: z.object({
+    search: z.string().min(1).max(50).optional(),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(100).default(50),
+  }),
+};
+
+module.exports = {
+  subscribeSchema,
+  unsubscribeSchema,
+  subscriberIdSchema,
+  updateSubscriberSchema,
+  importSubscribersSchema,
+  csvFileSchema,
+  getSubscribersSchema,
+  // Tag-related schemas
+  addTagsSchema,
+  removeTagsSchema,
+  getByTagsSchema,
+  getAllTagsSchema,
+};
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

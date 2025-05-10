@@ -130,6 +130,52 @@ const getSubscribersSchema = {
   }),
 };
 
+/**
+ * Tags validation schemas using Zod
+ */
+
+/**
+ * Add tags to subscriber schema
+ */
+const addTagsSchema = {
+  body: z.object({
+    tags: z.array(z.string().trim().min(1).max(50)).min(1, "At least one tag is required"),
+  }),
+};
+
+/**
+ * Remove tags from subscriber schema
+ */
+const removeTagsSchema = {
+  body: z.object({
+    tags: z.array(z.string().trim().min(1).max(50)).min(1, "At least one tag is required"),
+  }),
+};
+
+/**
+ * Get subscribers by tags schema
+ */
+const getByTagsSchema = {
+  query: z.object({
+    tags: z.array(z.string().trim().min(1).max(50)).min(1, "At least one tag is required"),
+    matchType: z.enum(["any", "all"]).default("any"),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(100).default(10),
+    isActive: z.boolean().optional(),
+  }),
+};
+
+/**
+ * Get all tags schema
+ */
+const getAllTagsSchema = {
+  query: z.object({
+    search: z.string().min(1).max(50).optional(),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(100).default(50),
+  }),
+};
+
 module.exports = {
   subscribeSchema,
   unsubscribeSchema,
@@ -138,4 +184,9 @@ module.exports = {
   importSubscribersSchema,
   csvFileSchema,
   getSubscribersSchema,
+  // Tag-related schemas
+  addTagsSchema,
+  removeTagsSchema,
+  getByTagsSchema,
+  getAllTagsSchema,
 };

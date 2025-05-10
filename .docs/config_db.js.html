@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>config/db.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">config/db.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module config/db
+ * @description PostgreSQL database configuration and query helpers
+ */
+const { Pool } = require("pg");
+const config = require("./index");
+const logger = require("../services/logger.service");
+
+/**
+ * PostgreSQL connection pool
+ * @constant {Pool}
+ */
+const pool = new Pool(config.db);
+
+pool.on("connect", () => {
+  logger.info("PostgreSQL connected");
+});
+
+pool.on("error", (err, client) => {
+  // Added client parameter
+  logger.error("Unexpected error on idle PostgreSQL client", err);
+  // Recommended action: remove the client from the pool or handle error appropriately
+  // For simplicity, just logging here. Production apps might need more robust handling.
+  // process.exit(-1); // Potentially too drastic, depends on the error
+});
+
+/**
+ * Executes a SQL query with proper error handling and connection management
+ * @async
+ * @function query
+ * @param {string} text - SQL query text
+ * @param {Array} [params] - Query parameters
+ * @returns {Promise&lt;Object>} PostgreSQL query result
+ * @throws {Error} Generic database error (avoids leaking query details)
+ */
+const query = async (text, params) => {
+  const start = Date.now();
+  let client; // Declare client variable
+  try {
+    client = await pool.connect(); // Get client from pool
+    const res = await client.query(text, params);
+    const duration = Date.now() - start;
+    // Optional logging for development: Be careful logging params in production if they contain sensitive data
+    // logger.debug('Executed query', { text, params: params || '[]', duration, rows: res.rowCount });
+    return res;
+  } catch (error) {
+    // Log the error with context
+    logger.error("Database Query Error:", {
+      text,
+      params: params || "[]", // Show params structure if available
+      errorCode: error.code, // PostgreSQL error code (e.g., '23505' for unique violation)
+      errorMessage: error.message,
+    });
+    // Don't expose raw SQL or detailed DB errors in production responses
+    throw new Error("Database error occurred"); // Throw a generic error or a custom DB Error class
+  } finally {
+    if (client) {
+      client.release(); // Ensure client is always released back to the pool
+    }
+  }
+};
+
+/**
+ * Gets a database client for executing transactions
+ * @async
+ * @function getClient
+ * @returns {Promise&lt;Object>} PostgreSQL client from the connection pool
+ * @throws {Error} If unable to acquire a client from the pool
+ * @example
+ * // Using a transaction
+ * const client = await getClient();
+ * try {
+ *   await client.query('BEGIN');
+ *   // ... perform multiple queries
+ *   await client.query('COMMIT');
+ * } catch (e) {
+ *   await client.query('ROLLBACK');
+ *   throw e;
+ * } finally {
+ *   client.release();
+ * }
+ */
+const getClient = async () => {
+  const client = await pool.connect();
+  return client;
+};
+
+/**
+ * Closes the PostgreSQL connection pool
+ * @async
+ * @function closePool
+ * @returns {Promise&lt;void>}
+ */
+const closePool = async () => {
+  // Close database pool
+  try {
+    if (pool) {
+      await pool.end();
+      logger.info("Database pool closed.");
+    }
+  } catch (dbErr) {
+    logger.error("Error closing database pool:", { error: dbErr.message, stack: dbErr.stack });
+  }
+};
+
+module.exports = {
+  pool, // Export pool for specific needs (e.g., listening to notifications)
+  query, // Main query helper
+  getClient, // Helper for transactions
+  disconnect: closePool, // Close pool function
+};
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

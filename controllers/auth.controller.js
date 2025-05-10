@@ -213,7 +213,7 @@ exports.login = async (req, res, next) => {
  * @function refreshToken
  * @param {Object} req - Express request object
  * @param {Object} req.cookies - Request cookies
- * @param {string} req.cookies[config.jwt.refreshCookieName] - Refresh token cookie
+ * @param {string} req.cookies.refreshToken - Refresh token cookie (accessed as req.cookies[config.jwt.refreshCookieName])
  * @param {Object} req.headers - Request headers
  * @param {string} req.headers.authorization - Authorization header with Bearer token
  * @param {Object} res - Express response object

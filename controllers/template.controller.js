@@ -144,8 +144,14 @@ exports.uploadTemplateImage = async (req, res, next) => {
       throw new BadRequest("No file provided");
     }
 
+    const { templateId } = req.params;
+
+    if (!templateId) {
+      throw new BadRequest("Template ID is required");
+    }
+
     const userId = req.user.id;
-    const result = await templateService.uploadTemplateImage(req.file, userId);
+    const result = await templateService.uploadTemplateImage(req.file, templateId, userId);
 
     res.json({
       success: true,

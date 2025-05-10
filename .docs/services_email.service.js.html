@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>services/email.service.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">services/email.service.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module services/email
+ * @description Service for sending transactional emails via message queue
+ */
+const queueService = require("./queue.service");
+const config = require("../config");
+const logger = require("./logger.service");
+
+/**
+ * Sends a verification email to a user
+ * @async
+ * @function sendVerificationEmail
+ * @param {string} email - Recipient's email address
+ * @param {string} token - Email verification token
+ * @returns {Promise&lt;void>}
+ */
+const sendVerificationEmail = async (email, token) => {
+  const verificationLink = `${config.apiUrl}/api/auth/verify-email?token=${token}`; // Link to backend verification endpoint
+  const message = {
+    type: "verify",
+    to: email,
+    subject: "Verify Your Email Address",
+    // Pass data needed for the template in the worker
+    context: {
+      verificationLink: verificationLink,
+      appName: "Your Awesome App", // Make this configurable later
+      clientUrl: config.clientUrl,
+    },
+  };
+  await queueService.publishToQueue(config.rabbitmq.queue_email, message);
+  logger.info(`[Queue] Verification email task published for ${email}`);
+};
+
+/**
+ * Sends a password reset email to a user
+ * @async
+ * @function sendPasswordResetEmail
+ * @param {string} email - Recipient's email address
+ * @param {string} token - Password reset token
+ * @returns {Promise&lt;void>}
+ */
+const sendPasswordResetEmail = async (email, token) => {
+  const resetLink = `${config.clientUrl}/reset-password?token=${token}`; // Link to frontend page that handles reset
+  const message = {
+    type: "reset",
+    to: email,
+    subject: "Password Reset Request",
+    context: {
+      resetLink: resetLink,
+      appName: "Your Awesome App",
+      clientUrl: config.clientUrl,
+    },
+  };
+  await queueService.publishToQueue(config.rabbitmq.queue_email, message);
+  logger.info(`[Queue] Password reset email task published for ${email}`);
+};
+
+// Maybe add a generic sendEmail function if needed elsewhere
+/**
+ * Generic email sending function (commented out but available for future use)
+ * @async
+ * @function sendEmail
+ * @param {string} to - Recipient's email address
+ * @param {string} subject - Email subject line
+ * @param {string} text - Plain text version of email content
+ * @param {string} html - HTML version of email content
+ * @returns {Promise&lt;void>}
+ */
+// const sendEmail = async (to, subject, text, html) => {
+//     const message = { type: 'generic', to, subject, text, html };
+//     await queueService.publishToQueue(config.rabbitmq.queue_email, message);
+// }
+
+module.exports = { sendVerificationEmail, sendPasswordResetEmail };
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

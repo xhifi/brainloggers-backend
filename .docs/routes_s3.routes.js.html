@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>routes/s3.routes.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">routes/s3.routes.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module Routes/Storage
+ * @description Routes for S3 file and folder operations
+ */
+const express = require("express");
+const { validate } = require("../middleware/validate");
+const { upload, handleMulterError } = require("../middleware/upload");
+const authenticate = require("../middleware/authenticate");
+const { hasAllPermissions, hasAnyPermission, hasRoles } = require("../middleware/authorize");
+const {
+  createFolderSchema,
+  getFileSchema,
+  listFilesSchema,
+  updateFileSchema,
+  moveFileSchema,
+  deleteFileSchema,
+  deleteFolderSchema,
+} = require("../dtos/s3.dto");
+const s3Controller = require("../controllers/s3.controller");
+
+const router = express.Router();
+
+/**
+ * @route POST /api/v1/storage/upload
+ * @description Upload a file to S3
+ * @access Private - requires authentication and storage:write permission
+ */
+router.post(
+  "/upload",
+  authenticate,
+  hasAnyPermission({ resource: "storage", action: "write" }, { resource: "storage", action: "admin" }),
+  upload.single("file"),
+  handleMulterError,
+  s3Controller.uploadFile
+);
+
+/**
+ * @route POST /api/v1/storage/folders
+ * @description Create a folder in S3
+ * @access Private - requires authentication and storage:write permission
+ */
+router.post(
+  "/folders",
+  authenticate,
+  hasAnyPermission({ resource: "storage", action: "write" }, { resource: "storage", action: "admin" }),
+  validate(createFolderSchema),
+  s3Controller.createFolder
+);
+
+/**
+ * @route GET /api/v1/storage/files/:fileKey
+ * @description Get a file from S3 (download or get presigned URL)
+ * @access Private - requires authentication and storage:read permission
+ */
+router.get(
+  "/files/:fileKey",
+  authenticate,
+  hasAnyPermission({ resource: "storage", action: "read" }, { resource: "storage", action: "admin" }),
+  validate(getFileSchema),
+  s3Controller.getFile
+);
+
+/**
+ * @route GET /api/v1/storage/list
+ * @description List files and folders in S3
+ * @access Private - requires authentication and storage:list permission
+ */
+router.get(
+  "/list",
+  authenticate,
+  hasAnyPermission({ resource: "storage", action: "list" }, { resource: "storage", action: "admin" }),
+  validate(listFilesSchema),
+  s3Controller.listFiles
+);
+
+/**
+ * @route PUT /api/v1/storage/files/:fileKey
+ * @description Update a file in S3
+ * @access Private - requires authentication and storage:write permission
+ */
+router.put(
+  "/files/:fileKey",
+  authenticate,
+  hasAnyPermission({ resource: "storage", action: "write" }, { resource: "storage", action: "admin" }),
+  validate(updateFileSchema),
+  upload.single("file"),
+  handleMulterError,
+  s3Controller.updateFile
+);
+
+/**
+ * @route POST /api/v1/storage/move
+ * @description Move/rename a file in S3
+ * @access Private - requires authentication and storage:write permission
+ */
+router.post(
+  "/move",
+  authenticate,
+  hasAnyPermission({ resource: "storage", action: "write" }, { resource: "storage", action: "admin" }),
+  validate(moveFileSchema),
+  s3Controller.moveFile
+);
+
+/**
+ * @route DELETE /api/v1/storage/files/:fileKey
+ * @description Delete a file from S3
+ * @access Private - requires authentication and storage:delete permission
+ */
+router.delete(
+  "/files/:fileKey",
+  authenticate,
+  hasAnyPermission({ resource: "storage", action: "delete" }, { resource: "storage", action: "admin" }),
+  validate(deleteFileSchema),
+  s3Controller.deleteFile
+);
+
+/**
+ * @route DELETE /api/v1/storage/folders
+ * @description Delete a folder from S3
+ * @access Private - requires authentication and storage:delete permission
+ */
+router.delete(
+  "/folders",
+  authenticate,
+  hasAnyPermission({ resource: "storage", action: "delete" }, { resource: "storage", action: "admin" }),
+  validate(deleteFolderSchema),
+  s3Controller.deleteFolder
+);
+
+module.exports = router;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

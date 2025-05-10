@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>dtos/campaign.dto.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">dtos/campaign.dto.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module dtos/campaign
+ * @description Validation schemas for campaign endpoints
+ */
+const z = require("zod");
+
+// Create campaign validation schema
+const campaignSchema = z.object({
+  name: z.string()
+    .trim()
+    .min(1, { message: 'Campaign name is required' })
+    .max(255, { message: 'Campaign name cannot exceed 255 characters' }),
+  description: z.string().trim().nullable().optional(),
+  templateId: z.number()
+    .int({ message: 'Template ID must be an integer' })
+    .positive({ message: 'Template ID must be a positive number' }),
+  fromEmail: z.string()
+    .email({ message: 'From email must be a valid email address' }),
+  replyTo: z.string()
+    .email({ message: 'Reply-to email must be a valid email address' })
+    .nullable()
+    .optional(),
+  subject: z.string()
+    .trim()
+    .min(1, { message: 'Subject is required' })
+    .max(255, { message: 'Subject cannot exceed 255 characters' }),
+  templateVariables: z.object({}).passthrough().nullable().optional(),
+  mailingListIds: z.array(
+    z.number()
+      .int({ message: 'Mailing list ID must be an integer' })
+      .positive({ message: 'Mailing list ID must be a positive number' })
+  ).min(1, { message: 'At least one mailing list is required' }),
+  scheduledAt: z.preprocess(
+    (val) => val ? new Date(val) : null,
+    z.date()
+      .refine((date) => date > new Date(), { message: 'Scheduled date must be in the future' })
+      .nullable()
+      .optional()
+  )
+});
+
+// Update campaign validation schema (similar but with optional fields)
+const updateCampaignSchema = z.object({
+  name: z.string()
+    .trim()
+    .min(1, { message: 'Campaign name cannot be empty' })
+    .max(255, { message: 'Campaign name cannot exceed 255 characters' })
+    .optional(),
+  description: z.string().trim().nullable().optional(),
+  templateId: z.number()
+    .int({ message: 'Template ID must be an integer' })
+    .positive({ message: 'Template ID must be a positive number' })
+    .optional(),
+  fromEmail: z.string()
+    .email({ message: 'From email must be a valid email address' })
+    .optional(),
+  replyTo: z.string()
+    .email({ message: 'Reply-to email must be a valid email address' })
+    .nullable()
+    .optional(),
+  subject: z.string()
+    .trim()
+    .min(1, { message: 'Subject cannot be empty' })
+    .max(255, { message: 'Subject cannot exceed 255 characters' })
+    .optional(),
+  templateVariables: z.object({}).passthrough().nullable().optional(),
+  mailingListIds: z.array(
+    z.number()
+      .int({ message: 'Mailing list ID must be an integer' })
+      .positive({ message: 'Mailing list ID must be a positive number' })
+  )
+    .min(1, { message: 'At least one mailing list is required' })
+    .optional(),
+  scheduledAt: z.preprocess(
+    (val) => val ? new Date(val) : null,
+    z.date()
+      .refine((date) => date > new Date(), { message: 'Scheduled date must be in the future' })
+      .nullable()
+      .optional()
+  )
+});
+
+// Schema for scheduling a campaign
+const scheduleCampaignSchema = z.object({
+  scheduledAt: z.preprocess(
+    (val) => val ? new Date(val) : null,
+    z.date()
+      .refine((date) => date > new Date(), { message: 'Scheduled date must be in the future' })
+  )
+});
+
+// Validation middleware functions
+exports.validateCampaign = (req, res, next) => {
+  try {
+    campaignSchema.parse(req.body);
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        field: err.path.join('.'),
+        message: err.message,
+      }));
+
+      return res.status(400).json({
+        success: false,
+        errors,
+      });
+    }
+    next(error);
+  }
+};
+
+exports.validateUpdateCampaign = (req, res, next) => {
+  try {
+    updateCampaignSchema.parse(req.body);
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        field: err.path.join('.'),
+        message: err.message,
+      }));
+
+      return res.status(400).json({
+        success: false,
+        errors,
+      });
+    }
+    next(error);
+  }
+};
+
+exports.validateScheduleCampaign = (req, res, next) => {
+  try {
+    scheduleCampaignSchema.parse(req.body);
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errors = error.errors.map((err) => ({
+        field: err.path.join('.'),
+        message: err.message,
+      }));
+
+      return res.status(400).json({
+        success: false,
+        errors,
+      });
+    }
+    next(error);
+  }
+};</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

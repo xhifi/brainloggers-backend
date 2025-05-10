@@ -1,5 +1,5 @@
 /**
- * @module routes/user
+ * @module Routes/Users
  * @description User routes for user management and authentication
  */
 const express = require("express");

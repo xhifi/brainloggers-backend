@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node --watch --env-file=.env index.js",
     "worker": "node --watch --env-file=.env worker.js",
-    "init-db": "node --watch --env-file=.env database/seeders/init_db.js"
+    "init-db": "node --watch --env-file=.env database/seeders/init_db.js",
+    "docs": "jsdoc -c jsdoc.json -r",
+    "clean-docs": "rimraf .docs"
   },
   "keywords": [],
   "author": "",
@@ -34,5 +36,11 @@
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "clean-jsdoc-theme": "^4.3.0",
+    "docdash": "^2.0.2",
+    "jsdoc": "^4.0.4",
+    "rimraf": "^5.0.10"
   }
 }

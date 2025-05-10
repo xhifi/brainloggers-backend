@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>services/s3.service.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">services/s3.service.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module services/s3
+ * @description Service for Amazon S3 storage operations (CRUD for files and folders)
+ */
+const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command, CopyObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { Readable } = require("stream");
+const config = require("../config");
+const logger = require("./logger.service");
+const { s3Client } = require("../config/aws");
+
+const bucketName = config.aws.s3BucketName;
+
+/**
+ * Check if the S3 client and bucket are properly configured
+ * @returns {boolean} True if S3 is configured, false otherwise
+ */
+const isS3Configured = () => {
+  if (!bucketName) {
+    logger.error("S3 bucket name is not configured. Check AWS_S3_BUCKET_NAME in your .env file.");
+    return false;
+  }
+
+  if (!config.aws.region) {
+    logger.error("AWS region is not configured. Check AWS_REGION in your .env file.");
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Upload a file to S3 bucket directly from memory
+ * @async
+ * @function uploadFile
+ * @param {Object} fileData - File data object from multer memory storage
+ * @param {Buffer} fileData.buffer - File content in memory
+ * @param {string} fileData.originalname - Original file name
+ * @param {string} fileData.mimetype - File MIME type
+ * @param {string} [folderPath=''] - S3 folder path (optional)
+ * @returns {Promise&lt;Object>} Upload result with file details
+ * @throws {Error} If the file upload fails
+ */
+const uploadFile = async (fileData, folderPath = "") => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    // Create the S3 key (path) using the folder path and original filename
+    const s3Key = folderPath ? `${folderPath.replace(/^\/*|\/*$/g, "")}/${fileData.originalname}` : fileData.originalname;
+
+    // Set up the S3 upload parameters using the buffer directly
+    const params = {
+      Bucket: bucketName,
+      Key: s3Key,
+      Body: fileData.buffer, // Use the buffer directly instead of reading from disk
+      ContentType: fileData.mimetype,
+      // You can add other parameters like ACL, Metadata, etc. as needed
+    };
+
+    // Execute the upload command
+    const command = new PutObjectCommand(params);
+    const result = await s3Client.send(command);
+
+    // Generate a presigned URL for temporary access to the file
+    const getCommand = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: s3Key,
+    });
+    const presignedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 }); // 1 hour expiry
+
+    // Return the upload result with file details
+    return {
+      key: s3Key,
+      location: `https://${bucketName}.s3.${config.aws.region}.amazonaws.com/${s3Key}`,
+      presignedUrl,
+      etag: result.ETag,
+      size: fileData.size,
+      mimetype: fileData.mimetype,
+      originalName: fileData.originalname,
+    };
+  } catch (error) {
+    logger.error(`Error uploading file to S3: ${error.message}`, { error });
+    throw error;
+  }
+};
+
+/**
+ * Create a folder in S3 bucket
+ * @async
+ * @function createFolder
+ * @param {string} folderPath - Folder path to create
+ * @returns {Promise&lt;Object>} Creation result with folder details
+ * @throws {Error} If the folder creation fails
+ */
+const createFolder = async (folderPath) => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    // Normalize folder path to ensure it has trailing slash but no leading slash
+    const normalizedPath = `${folderPath.replace(/^\/*|\/*$/g, "")}/`;
+
+    // Create an empty object to represent the folder
+    const params = {
+      Bucket: bucketName,
+      Key: normalizedPath,
+      Body: "", // Empty content for folder placeholder
+    };
+
+    const command = new PutObjectCommand(params);
+    const result = await s3Client.send(command);
+
+    return {
+      key: normalizedPath,
+      location: `https://${bucketName}.s3.${config.aws.region}.amazonaws.com/${normalizedPath}`,
+      etag: result.ETag,
+    };
+  } catch (error) {
+    logger.error(`Error creating folder in S3: ${error.message}`, { error });
+    throw error;
+  }
+};
+
+/**
+ * Get a file from S3 bucket
+ * @async
+ * @function getFile
+ * @param {string} fileKey - S3 key of the file to retrieve
+ * @param {boolean} [generatePresignedUrl=false] - Whether to generate a presigned URL
+ * @returns {Promise&lt;Object>} File data or presigned URL
+ * @throws {Error} If the file retrieval fails
+ */
+const getFile = async (fileKey, generatePresignedUrl = false) => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    const params = {
+      Bucket: bucketName,
+      Key: fileKey,
+    };
+
+    if (generatePresignedUrl) {
+      // Generate a presigned URL for temporary access
+      const command = new GetObjectCommand(params);
+      const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); // 1 hour expiry
+
+      return {
+        key: fileKey,
+        presignedUrl,
+      };
+    } else {
+      // Get the file content directly
+      const command = new GetObjectCommand(params);
+      const response = await s3Client.send(command);
+
+      // Convert the readable stream to a buffer
+      const chunks = [];
+      const stream = response.Body;
+
+      if (stream instanceof Readable) {
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+      }
+
+      const fileContent = Buffer.concat(chunks);
+
+      return {
+        key: fileKey,
+        content: fileContent,
+        contentType: response.ContentType,
+        etag: response.ETag,
+        lastModified: response.LastModified,
+        metadata: response.Metadata,
+        contentLength: response.ContentLength,
+      };
+    }
+  } catch (error) {
+    logger.error(`Error getting file from S3: ${error.message}`, { error });
+    throw error;
+  }
+};
+
+/**
+ * List files and folders in an S3 bucket path
+ * @async
+ * @function listFiles
+ * @param {string} [prefix=''] - S3 prefix (folder path) to list
+ * @param {boolean} [recursive=false] - Whether to recursively list all files
+ * @returns {Promise&lt;Object>} List of files and folders
+ * @throws {Error} If the listing fails
+ */
+const listFiles = async (prefix = "", recursive = false) => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    // Normalize the prefix to have a trailing slash for folder paths, unless empty
+    const normalizedPrefix = prefix ? `${prefix.replace(/^\/*|\/*$/g, "")}/` : "";
+
+    const params = {
+      Bucket: bucketName,
+      Prefix: normalizedPrefix,
+      Delimiter: recursive ? undefined : "/", // Use delimiter to organize by "folder"
+    };
+
+    const command = new ListObjectsV2Command(params);
+    const response = await s3Client.send(command);
+
+    // Process directories (CommonPrefixes) and files (Contents)
+    const directories = (response.CommonPrefixes || []).map((prefix) => ({
+      key: prefix.Prefix,
+      name: prefix.Prefix.split("/").slice(-2)[0],
+      type: "folder",
+      path: prefix.Prefix,
+    }));
+
+    const files = (response.Contents || [])
+      // Filter out the current directory placeholder
+      .filter((item) => item.Key !== normalizedPrefix)
+      .map((item) => {
+        const name = item.Key.split("/").pop();
+        // Skip empty names (trailing slashes that indicate folders)
+        if (!name) return null;
+
+        return {
+          key: item.Key,
+          name,
+          type: "file",
+          size: item.Size,
+          lastModified: item.LastModified,
+          etag: item.ETag,
+          path: item.Key,
+        };
+      })
+      .filter(Boolean); // Remove any null items
+
+    return {
+      files,
+      directories,
+      prefix: normalizedPrefix,
+      isTruncated: response.IsTruncated,
+      nextContinuationToken: response.NextContinuationToken,
+    };
+  } catch (error) {
+    logger.error(`Error listing files in S3: ${error.message}`, { error });
+    throw error;
+  }
+};
+
+/**
+ * Update (replace) a file in S3 bucket directly from memory
+ * @async
+ * @function updateFile
+ * @param {string} fileKey - S3 key of the file to update
+ * @param {Object} fileData - New file data from multer memory storage
+ * @param {Buffer} fileData.buffer - File content in memory
+ * @param {string} fileData.mimetype - File MIME type
+ * @returns {Promise&lt;Object>} Update result with file details
+ * @throws {Error} If the file update fails
+ */
+const updateFile = async (fileKey, fileData) => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    // Set up the S3 upload parameters with buffer
+    const params = {
+      Bucket: bucketName,
+      Key: fileKey,
+      Body: fileData.buffer, // Use the buffer directly instead of reading from disk
+      ContentType: fileData.mimetype,
+    };
+
+    // Execute the update command
+    const command = new PutObjectCommand(params);
+    const result = await s3Client.send(command);
+
+    // Generate a presigned URL for temporary access to the file
+    const getCommand = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: fileKey,
+    });
+    const presignedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 }); // 1 hour expiry
+
+    return {
+      key: fileKey,
+      location: `https://${bucketName}.s3.${config.aws.region}.amazonaws.com/${fileKey}`,
+      presignedUrl,
+      etag: result.ETag,
+      size: fileData.size,
+      mimetype: fileData.mimetype,
+      originalName: fileData.originalname,
+    };
+  } catch (error) {
+    logger.error(`Error updating file in S3: ${error.message}`, { error });
+    throw error;
+  }
+};
+
+/**
+ * Move/rename a file or folder in S3 bucket
+ * @async
+ * @function moveFile
+ * @param {string} sourceKey - S3 key of the source file or folder
+ * @param {string} destinationKey - S3 key of the destination
+ * @returns {Promise&lt;Object>} Move result with file details
+ * @throws {Error} If the file move fails
+ */
+const moveFile = async (sourceKey, destinationKey) => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    // Copy the file to the new location
+    const copyParams = {
+      Bucket: bucketName,
+      CopySource: `${bucketName}/${sourceKey}`,
+      Key: destinationKey,
+    };
+
+    const copyCommand = new CopyObjectCommand(copyParams);
+    const copyResult = await s3Client.send(copyCommand);
+
+    // Delete the source file
+    const deleteParams = {
+      Bucket: bucketName,
+      Key: sourceKey,
+    };
+
+    const deleteCommand = new DeleteObjectCommand(deleteParams);
+    await s3Client.send(deleteCommand);
+
+    return {
+      sourceKey,
+      destinationKey,
+      location: `https://${bucketName}.s3.${config.aws.region}.amazonaws.com/${destinationKey}`,
+      etag: copyResult.CopyObjectResult.ETag,
+    };
+  } catch (error) {
+    logger.error(`Error moving file in S3: ${error.message}`, { error });
+    throw error;
+  }
+};
+
+/**
+ * Delete a file or folder from S3 bucket
+ * @async
+ * @function deleteFile
+ * @param {string} fileKey - S3 key of the file or folder to delete
+ * @returns {Promise&lt;Object>} Deletion result
+ * @throws {Error} If the file deletion fails
+ */
+const deleteFile = async (fileKey) => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    const params = {
+      Bucket: bucketName,
+      Key: fileKey,
+    };
+
+    const command = new DeleteObjectCommand(params);
+    await s3Client.send(command);
+
+    return {
+      key: fileKey,
+      deleted: true,
+    };
+  } catch (error) {
+    logger.error(`Error deleting file from S3: ${error.message}`, { error });
+    throw error;
+  }
+};
+
+/**
+ * Delete a folder and all its contents from S3 bucket
+ * @async
+ * @function deleteFolder
+ * @param {string} folderPath - S3 folder path to delete
+ * @returns {Promise&lt;Object>} Deletion result
+ * @throws {Error} If the folder deletion fails
+ */
+const deleteFolder = async (folderPath) => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    // Normalize folder path to ensure it has trailing slash but no leading slash
+    const normalizedPath = `${folderPath.replace(/^\/*|\/*$/g, "")}/`;
+
+    // List all objects in the folder
+    const listResult = await listFiles(normalizedPath, true);
+    const allObjects = [...listResult.files, { key: normalizedPath }]; // Include the folder itself
+
+    // Delete each object
+    const deletionResults = await Promise.all(
+      allObjects.map(async (obj) => {
+        try {
+          await deleteFile(obj.key);
+          return { key: obj.key, deleted: true };
+        } catch (error) {
+          logger.error(`Error deleting object ${obj.key}: ${error.message}`);
+          return { key: obj.key, deleted: false, error: error.message };
+        }
+      })
+    );
+
+    return {
+      path: normalizedPath,
+      deleted: true,
+      totalDeleted: deletionResults.filter((r) => r.deleted).length,
+      totalFailed: deletionResults.filter((r) => !r.deleted).length,
+      details: deletionResults,
+    };
+  } catch (error) {
+    logger.error(`Error deleting folder from S3: ${error.message}`, { error });
+    throw error;
+  }
+};
+
+module.exports = {
+  uploadFile,
+  createFolder,
+  getFile,
+  listFiles,
+  updateFile,
+  moveFile,
+  deleteFile,
+  deleteFolder,
+  isS3Configured,
+};
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="utf-8">
+    <title>routes/mailing-list.routes.js - Auth App API Documentation</title>
+    
+    <meta name="description" content="Documentation for Auth App with RBAC and SQL" />
+    
+        <meta name="keywords" content="auth, api, documentation, sql, rbac" />
+        <meta name="keyword" content="auth, api, documentation, sql, rbac" />
+    
+    
+    
+    <script src="scripts/prettify/prettify.js"></script>
+    <script src="scripts/prettify/lang-css.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc.css">
+    <script src="scripts/nav.js" defer></script>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger" class="navicon-button x">
+  <div class="navicon"></div>
+</label>
+
+<label for="nav-trigger" class="overlay"></label>
+
+<nav class="wrap">
+    
+    <input type="text" id="nav-search" placeholder="Search" />
+    
+    
+    <h2><a href="index.html">Home</a></h2><h2><a Routes/Authentication="Authentication Routes" Routes/Users="User Routes" Routes/Campaigns="Campaign Routes" Routes/MailingLists="Mailing List Routes" Routes/Templates="Template Routes" Routes/Tags="Tag Routes" Routes/Subscriptions="Subscription Routes" Routes/Permissions="Permission Routes" Routes/Storage="Storage Routes" >API_Routes</a></h2><h2><a Services/User="User Services" Services/Campaign="Campaign Services" Services/Email="Email Services" Services/MailingList="Mailing List Services" Services/Template="Template Services" >Services</a></h2>undefinedundefinedundefinedundefinedundefinedundefinedundefinedundefined<h3>Global</h3><ul><li><a href="global.html#CreateFolderSchema">CreateFolderSchema</a></li><li><a href="global.html#createTemplate">createTemplate</a></li><li><a href="global.html#deleteTemplate">deleteTemplate</a></li><li><a href="global.html#deleteUser">deleteUser</a></li><li><a href="global.html#extractVariables">extractVariables</a></li><li><a href="global.html#getTemplateById">getTemplateById</a></li><li><a href="global.html#listTemplates">listTemplates</a></li><li><a href="global.html#renderTemplate">renderTemplate</a></li><li><a href="global.html#updateTemplate">updateTemplate</a></li><li><a href="global.html#uploadTemplateImage">uploadTemplateImage</a></li></ul>
+    
+</nav>
+
+<div id="main">
+    
+    <h1 class="page-title">routes/mailing-list.routes.js</h1>
+    
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * @module Routes/MailingLists
+ * @description Routes for mailing list management
+ */
+const express = require("express");
+const router = express.Router();
+const mailingListController = require("../controllers/mailing-list.controller");
+const authenticate = require("../middleware/authenticate");
+const { hasAllPermissions } = require("../middleware/authorize");
+const { validate } = require("../middleware/validate");
+const { validateMailingList, validateUpdateMailingList } = require("../dtos/mailing-list.dto");
+
+// Mailing list middleware groups
+const mailingListReadAccess = [authenticate, hasAllPermissions({ resource: "subscriptions", action: "read" })];
+const mailingListCreateAccess = [authenticate, hasAllPermissions({ resource: "subscriptions", action: "create" })];
+const mailingListUpdateAccess = [authenticate, hasAllPermissions({ resource: "subscriptions", action: "update" })];
+const mailingListDeleteAccess = [authenticate, hasAllPermissions({ resource: "subscriptions", action: "delete" })];
+
+/**
+ * @route   GET /api/mailing-lists
+ * @desc    List all mailing lists with pagination and filtering
+ * @access  Private - Requires subscription:read permission
+ */
+router.get("/", ...mailingListReadAccess, mailingListController.listMailingLists);
+
+/**
+ * @route   GET /api/mailing-lists/:id
+ * @desc    Get a specific mailing list by ID
+ * @access  Private - Requires subscription:read permission
+ */
+router.get("/:id", ...mailingListReadAccess, mailingListController.getMailingListById);
+
+/**
+ * @route   POST /api/mailing-lists
+ * @desc    Create a new mailing list
+ * @access  Private - Requires subscription:create permission
+ */
+router.post("/", ...mailingListCreateAccess, validateMailingList, mailingListController.createMailingList);
+
+/**
+ * @route   PUT /api/mailing-lists/:id
+ * @desc    Update an existing mailing list
+ * @access  Private - Requires subscription:update permission
+ */
+router.put("/:id", ...mailingListUpdateAccess, validateUpdateMailingList, mailingListController.updateMailingList);
+
+/**
+ * @route   DELETE /api/mailing-lists/:id
+ * @desc    Delete (soft delete) a mailing list
+ * @access  Private - Requires subscription:delete permission
+ */
+router.delete("/:id", ...mailingListDeleteAccess, mailingListController.deleteMailingList);
+
+/**
+ * @route   GET /api/mailing-lists/:id/recipients
+ * @desc    Get recipients of a mailing list
+ * @access  Private - Requires subscription:read permission
+ */
+router.get("/:id/recipients", ...mailingListReadAccess, mailingListController.getMailingListRecipients);
+
+/**
+ * @route   GET /api/mailing-lists/:id/variables
+ * @desc    Get variables available for a mailing list
+ * @access  Private - Requires subscription:read permission
+ */
+router.get("/:id/variables", ...mailingListReadAccess, mailingListController.getMailingListVariables);
+
+module.exports = router;</code></pre>
+        </article>
+    </section>
+
+
+
+
+    
+    
+</div>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 4.0.4</a> using the <a href="https://github.com/clenemt/docdash">docdash</a> theme.
+</footer>
+
+<script>prettyPrint();</script>
+<script src="scripts/polyfill.js"></script>
+<script src="scripts/linenumber.js"></script>
+
+<script src="scripts/search.js" defer></script>
+
+
+
+</body>
+</html>

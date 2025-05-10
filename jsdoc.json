@@ -1,0 +1,82 @@
+{
+  "source": {
+    "include": [
+      "./config",
+      "./controllers",
+      "./dtos",
+      "./middleware",
+      "./queues",
+      "./routes",
+      "./services",
+      "./utils",
+      "./server",
+      "./database",
+      "index.js",
+      "worker.js",
+      "docs.js"
+    ],
+    "includePattern": ".+\\.js$",
+    "excludePattern": "(node_modules|.docs)"
+  },
+  "opts": {
+    "destination": "./.docs",
+    "recurse": true,
+    "template": "node_modules/docdash",
+    "readme": "./README.md",
+    "verbose": true
+  },
+  "plugins": ["plugins/markdown", "plugins/summarize"],
+  "templates": {
+    "cleverLinks": true,
+    "monospaceLinks": false,
+    "default": {
+      "outputSourceFiles": true,
+      "includeDate": false
+    }
+  },
+  "docdash": {
+    "static": false,
+    "sort": true,
+    "sectionOrder": ["Routes", "Services", "Controllers", "DTOs", "Middleware", "Utils", "Config", "Server", "Global"],
+    "meta": {
+      "title": "Auth App API Documentation",
+      "description": "Documentation for Auth App with RBAC and SQL",
+      "keyword": "auth, api, documentation, sql, rbac"
+    },
+    "search": true,
+    "collapse": false,
+    "wrap": true,
+    "typedefs": true,
+    "navMembers": [
+      { "kind": "class", "title": "Classes", "summary": "All documented classes." },
+      { "kind": "external", "title": "Externals", "summary": "All documented external members." },
+      { "kind": "global", "title": "Globals", "summary": "All documented globals." },
+      { "kind": "mixin", "title": "Mixins", "summary": "All documented mixins." },
+      { "kind": "interface", "title": "Interfaces", "summary": "All documented interfaces." },
+      { "kind": "module", "title": "Modules", "summary": "All documented modules." },
+      { "kind": "namespace", "title": "Namespaces", "summary": "All documented namespaces." },
+      { "kind": "tutorial", "title": "Tutorials", "summary": "All available tutorials." }
+    ],
+    "menu": {
+      "API_Routes": {
+        "Routes/Authentication": "Authentication Routes",
+        "Routes/Users": "User Routes",
+        "Routes/Campaigns": "Campaign Routes",
+        "Routes/MailingLists": "Mailing List Routes",
+        "Routes/Templates": "Template Routes",
+        "Routes/Tags": "Tag Routes",
+        "Routes/Subscriptions": "Subscription Routes",
+        "Routes/Permissions": "Permission Routes",
+        "Routes/Storage": "Storage Routes"
+      },
+      "Services": {
+        "Services/User": "User Services",
+        "Services/Campaign": "Campaign Services",
+        "Services/Email": "Email Services",
+        "Services/MailingList": "Mailing List Services",
+        "Services/Template": "Template Services"
+      }
+    },
+    "scripts": []
+  }
+}

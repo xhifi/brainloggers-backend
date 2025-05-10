@@ -1,27 +1,24 @@
+/**
+ * @module services/template
+ * @description Service for managing email templates
+ * @category Services
+ * @subcategory Template
+ */
 const mjml2html = require("mjml");
 const { v4: uuidv4 } = require("uuid");
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const db = require("../config/db");
 const config = require("../config");
 const logger = require("./logger.service");
 const { NotFound } = require("../utils/errors");
+const s3Service = require("./s3.service");
 
-// Initialize S3 client
-const s3Client = new S3Client({
-  region: config.aws.region,
-  credentials: {
-    accessKeyId: config.aws.accessKeyId,
-    secretAccessKey: config.aws.secretAccessKey,
-  },
-});
-
-const BUCKET_NAME = config.aws.bucketName;
 const TEMPLATE_FOLDER = "templates";
 const IMAGE_FOLDER = "images";
 
 /**
  * Extract template variables from MJML content
+ * @function extractTemplateVariables
+ * @memberof module:services/template
  * @param {string} mjmlContent - The MJML content
  * @returns {Array} - Array of variable names
  */
@@ -39,6 +36,8 @@ const extractTemplateVariables = (mjmlContent) => {
 
 /**
  * Process MJML template and return HTML
+ * @function processMjmlToHtml
+ * @memberof module:services/template
  * @param {string} mjmlContent - The MJML template content
  * @returns {Object} - Object containing HTML output and errors if any
  */
@@ -60,52 +59,9 @@ const processMjmlToHtml = (mjmlContent) => {
 };
 
 /**
- * Upload file to S3
- * @param {string} key - The S3 object key
- * @param {Buffer|string} content - The content to upload
- * @param {string} contentType - The content type of the file
- * @returns {Promise<string>} - S3 key of the uploaded file
- */
-const uploadToS3 = async (key, content, contentType) => {
-  try {
-    const params = {
-      Bucket: BUCKET_NAME,
-      Key: key,
-      Body: content,
-      ContentType: contentType,
-    };
-
-    const command = new PutObjectCommand(params);
-    await s3Client.send(command);
-    return key;
-  } catch (error) {
-    logger.error("Error uploading to S3:", error);
-    throw new Error(`Error uploading to S3: ${error.message}`);
-  }
-};
-
-/**
- * Get signed URL for an S3 object
- * @param {string} key - The S3 object key
- * @param {number} expiresIn - URL expiration time in seconds
- * @returns {Promise<string>} - Signed URL
- */
-const getS3SignedUrl = async (key, expiresIn = 3600) => {
-  try {
-    const command = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-    });
-
-    return await getSignedUrl(s3Client, command, { expiresIn });
-  } catch (error) {
-    logger.error("Error generating signed URL:", error);
-    throw new Error(`Error generating signed URL: ${error.message}`);
-  }
-};
-
-/**
  * Replace template variables with actual values
+ * @function processTemplateVariables
+ * @memberof module:services/template
  * @param {string} template - The template content (HTML or MJML)
  * @param {Object} variables - Object containing variable values
  * @returns {string} - The processed template
@@ -123,6 +79,8 @@ const processTemplateVariables = (template, variables) => {
 
 /**
  * Create a new email template
+ * @function createTemplate
+ * @memberof module:services/template
  * @param {Object} templateData - Template data
  * @param {string} userId - ID of the user creating the template
  * @returns {Promise<Object>} - Created template
@@ -143,16 +101,31 @@ const createTemplate = async (templateData, userId) => {
     logger.warn("MJML processing had errors:", errors);
   }
 
-  // Generate unique folder for this template
+  // Generate unique folder name for this template
   const templateId = uuidv4();
-  const templateFolder = `${TEMPLATE_FOLDER}/${templateId}`;
+  const templateFolder = `${TEMPLATE_FOLDER}/template-${templateId}`;
 
-  // Upload MJML and HTML to S3
-  const mjmlKey = `${templateFolder}/template.mjml`;
-  const htmlKey = `${templateFolder}/template.html`;
+  // Create file objects for S3 upload with the specified file names
+  const mjmlFile = {
+    buffer: Buffer.from(mjmlSource),
+    mimetype: "text/plain",
+    originalname: "src.mjml",
+    size: Buffer.byteLength(mjmlSource),
+  };
 
-  await uploadToS3(mjmlKey, mjmlSource, "text/plain");
-  await uploadToS3(htmlKey, html, "text/html");
+  const htmlFile = {
+    buffer: Buffer.from(html),
+    mimetype: "text/html",
+    originalname: "output.html",
+    size: Buffer.byteLength(html),
+  };
+
+  // Upload MJML and HTML to S3 using s3Service
+  const mjmlUploadResult = await s3Service.uploadFile(mjmlFile, templateFolder);
+  const htmlUploadResult = await s3Service.uploadFile(htmlFile, templateFolder);
+
+  const mjmlKey = mjmlUploadResult.key;
+  const htmlKey = htmlUploadResult.key;
 
   // Save to database
   const query = `
@@ -177,6 +150,8 @@ const createTemplate = async (templateData, userId) => {
 
 /**
  * Update an existing email template
+ * @function updateTemplate
+ * @memberof module:services/template
  * @param {number} id - Template ID
  * @param {Object} templateData - Updated template data
  * @param {string} userId - ID of the user updating the template
@@ -222,9 +197,24 @@ const updateTemplate = async (id, templateData, userId) => {
     // Extract variables if not provided
     const templateVariables = templateData.templateVariables || extractTemplateVariables(mjmlSource);
 
-    // Upload updated MJML and HTML to S3 (using same keys)
-    await uploadToS3(existingTemplate.mjmlS3Key, mjmlSource, "text/plain");
-    await uploadToS3(existingTemplate.htmlS3Key, html, "text/html");
+    // Create file objects for S3 update with the specified file names
+    const mjmlFile = {
+      buffer: Buffer.from(mjmlSource),
+      mimetype: "text/plain",
+      originalname: "src.mjml", // Use the standardized naming convention
+      size: Buffer.byteLength(mjmlSource),
+    };
+
+    const htmlFile = {
+      buffer: Buffer.from(html),
+      mimetype: "text/html",
+      originalname: "output.html", // Use the standardized naming convention
+      size: Buffer.byteLength(html),
+    };
+
+    // Update MJML and HTML in S3 using s3Service
+    await s3Service.updateFile(existingTemplate.mjmlS3Key, mjmlFile);
+    await s3Service.updateFile(existingTemplate.htmlS3Key, htmlFile);
 
     // Update template_variables in database
     updateFields.push(`template_variables = $${paramCount++}`);
@@ -264,6 +254,8 @@ const updateTemplate = async (id, templateData, userId) => {
 
 /**
  * Delete a template (soft delete)
+ * @function deleteTemplate
+ * @memberof module:services/template
  * @param {number} id - Template ID
  * @returns {Promise<boolean>} - Success status
  */
@@ -289,6 +281,8 @@ const deleteTemplate = async (id) => {
 
 /**
  * Get template by ID
+ * @function getTemplateById
+ * @memberof module:services/template
  * @param {number} id - Template ID
  * @returns {Promise<Object>} - Template data
  */
@@ -312,6 +306,8 @@ const getTemplateById = async (id) => {
 
 /**
  * List templates with pagination and filtering
+ * @function listTemplates
+ * @memberof module:services/template
  * @param {Object} options - Filter and pagination options
  * @returns {Promise<Object>} - Paginated template list
  */
@@ -384,29 +380,54 @@ const listTemplates = async (options = {}) => {
 
 /**
  * Upload a template image to S3
+ * @function uploadTemplateImage
+ * @memberof module:services/template
  * @param {Object} file - Uploaded file object from multer
+ * @param {string} templateId - ID of the template to associate the image with
  * @param {string} userId - User ID of uploader
  * @returns {Promise<Object>} - Upload result with URL
  */
-const uploadTemplateImage = async (file, userId) => {
+const uploadTemplateImage = async (file, templateId, userId) => {
   if (!file) {
     throw new Error("No file provided");
   }
 
+  if (!templateId) {
+    throw new Error("Template ID is required");
+  }
+
+  // Get template to verify it exists and to get its folder path
+  const template = await getTemplateById(templateId);
+  if (!template) {
+    throw new NotFound("Template not found");
+  }
+
   const uniqueId = uuidv4();
   const fileExtension = file.originalname.split(".").pop();
-  const key = `${IMAGE_FOLDER}/${uniqueId}.${fileExtension}`;
+
+  // Create image folder path within the template's folder
+  const imagesFolder = `${template.s3AssetsPath}/images`;
+
+  // Create a file object with unique filename
+  const imageFile = {
+    ...file,
+    originalname: `${uniqueId}.${fileExtension}`,
+  };
 
   try {
-    await uploadToS3(key, file.buffer, file.mimetype);
-    const url = await getS3SignedUrl(key, 60 * 60 * 24); // 24-hour signed URL
+    // Upload the file using s3Service to the template's images folder
+    const uploadResult = await s3Service.uploadFile(imageFile, imagesFolder);
+
+    // Get a presigned URL with 24-hour expiry
+    const fileResult = await s3Service.getFile(uploadResult.key, true);
 
     return {
-      url,
-      key,
+      url: fileResult.presignedUrl,
+      key: uploadResult.key,
       filename: file.originalname,
       size: file.size,
       mimetype: file.mimetype,
+      templateId: templateId,
     };
   } catch (error) {
     logger.error("Error uploading template image:", error);
@@ -416,6 +437,8 @@ const uploadTemplateImage = async (file, userId) => {
 
 /**
  * Transform database row to template object
+ * @function transformTemplateFromDb
+ * @memberof module:services/template
  * @param {Object} dbTemplate - Template row from database
  * @returns {Object} - Transformed template object
  */
@@ -446,6 +469,8 @@ const transformTemplateFromDb = (dbTemplate) => {
 
 /**
  * Render template with variable substitution
+ * @function renderTemplate
+ * @memberof module:services/template
  * @param {number} templateId - Template ID
  * @param {Object} variables - Variables to substitute
  * @returns {Promise<string>} - Rendered HTML
@@ -457,15 +482,10 @@ const renderTemplate = async (templateId, variables = {}) => {
     throw new NotFound("Template not found");
   }
 
-  // Get HTML from S3
-  const getCommand = new GetObjectCommand({
-    Bucket: BUCKET_NAME,
-    Key: template.htmlS3Key,
-  });
-
   try {
-    const response = await s3Client.send(getCommand);
-    const html = await response.Body.transformToString();
+    // Get HTML from S3 using s3Service
+    const fileResult = await s3Service.getFile(template.htmlS3Key);
+    const html = fileResult.content.toString("utf8");
 
     // Replace variables
     return processTemplateVariables(html, variables);
