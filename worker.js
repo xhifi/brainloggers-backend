@@ -5,10 +5,15 @@ require("dotenv").config();
 const config = require("./config");
 const { connectRabbitMQ } = require("./config/rabbitmq");
 const emailConsumer = require("./queues/consumers/email.consumer");
+const campaignConsumer = require("./queues/consumers/campaign.consumer");
+const campaignEmailConsumer = require("./queues/consumers/campaign-email.consumer");
+const campaignScheduler = require("./queues/schedulers/campaign.scheduler");
 const logger = require("./services/logger.service");
 
 // Check if transporter is configured before starting (avoid starting if email is fundamentally broken)
 const transporter = require("./config/aws");
+
+let schedulerTask = null;
 
 async function startWorker() {
   logger.info(`[Worker] Starting background worker process in ${config.env} mode...`);
@@ -34,6 +39,18 @@ async function startWorker() {
     await emailConsumer.start(channel);
     logger.info("[Worker] Email consumer started successfully.");
 
+    // Start campaign consumer for campaign management actions
+    await campaignConsumer.start(channel);
+    logger.info("[Worker] Campaign consumer started successfully.");
+
+    // Initialize campaign email consumer for sending campaign emails
+    await campaignEmailConsumer.initCampaignEmailConsumer();
+    logger.info("[Worker] Campaign email consumer initialized successfully.");
+
+    // Start campaign scheduler (checks every 5 minutes by default)
+    schedulerTask = campaignScheduler.start();
+    logger.info("[Worker] Campaign scheduler started successfully.");
+
     logger.info("[Worker] Worker is running and waiting for tasks. To exit press CTRL+C");
 
     // Graceful Shutdown for Worker
@@ -41,6 +58,13 @@ async function startWorker() {
     Object.keys(signals).forEach((signal) => {
       process.on(signal, async () => {
         logger.info(`\n[Worker] Received ${signal}. Shutting down gracefully...`);
+
+        // Stop the scheduler
+        if (schedulerTask) {
+          logger.info("[Worker] Stopping campaign scheduler...");
+          campaignScheduler.stop(schedulerTask);
+        }
+
         // Close RabbitMQ connection (needs implementation in config/rabbitmq.js)
         logger.info("[Worker] Closing RabbitMQ connection...");
         // await require('./config/rabbitmq').closeConnection(); // Hypothetical function

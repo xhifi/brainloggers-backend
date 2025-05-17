@@ -13,6 +13,10 @@ This application is a robust authentication and authorization system built with 
 - Mailing list management based on tags
 - File storage using AWS S3
 - Email sending via queue system
+- Blog post management with markdown support
+- Multiple author collaboration on blog posts
+- Tagging and organization of blog content
+- Comment system with moderation
 
 ## API Documentation
 
@@ -44,6 +48,21 @@ This documentation is generated using JSDoc and provides detailed information ab
    ```
    npm run worker
    ```
+
+## Blog System
+
+The application includes a full-featured blog system with the following capabilities:
+
+- **Post Management**: Create, update, publish and delete blog posts with markdown content
+- **Collaboration**: Multiple authors can work on any post
+- **Content Storage**: Markdown content stored in S3 with metadata in the database for fast retrieval
+- **Permissions**:
+  - Admins can publish posts
+  - Authors and editors can create and edit drafts
+  - Regular users can read published posts and comment
+- **Comments**: Comment system with approval workflow
+
+For detailed API documentation, see [Blog API Documentation](./docs/blog-api.md).
 
 ## Documentation
 

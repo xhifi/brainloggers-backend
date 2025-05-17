@@ -13,6 +13,7 @@ const logger = require("../services/logger.service");
  * @param {Object} req.file - Uploaded file data from multer
  * @param {Object} req.body - Request body
  * @param {string} req.body.folderPath - Optional folder path to store file in
+ * @param {boolean} req.body.isPublic - Whether the file should be publicly readable (default: false)
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  * @returns {Promise<void>}
@@ -25,7 +26,10 @@ exports.uploadFile = async (req, res, next) => {
     }
 
     const { folderPath } = req.body;
-    const result = await s3Service.uploadFile(req.file, folderPath);
+    // Convert isPublic string to boolean (form data sends strings)
+    const isPublic = req.body.isPublic === "true";
+
+    const result = await s3Service.uploadFile(req.file, folderPath, isPublic);
 
     res.status(201).json({
       message: "File uploaded successfully",
@@ -141,6 +145,8 @@ exports.listFiles = async (req, res, next) => {
  * @param {Object} req.params - URL parameters
  * @param {string} req.params.fileKey - S3 key of the file to update
  * @param {Object} req.file - Uploaded file data from multer
+ * @param {Object} req.body - Request body
+ * @param {boolean} req.body.isPublic - Whether the file should be publicly readable (default: false)
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  * @returns {Promise<void>}
@@ -153,7 +159,10 @@ exports.updateFile = async (req, res, next) => {
     }
 
     const { fileKey } = req.params;
-    const result = await s3Service.updateFile(fileKey, req.file);
+    // Convert isPublic string to boolean (form data sends strings)
+    const isPublic = req.body.isPublic === "true";
+
+    const result = await s3Service.updateFile(fileKey, req.file, isPublic);
 
     res.json({
       message: "File updated successfully",

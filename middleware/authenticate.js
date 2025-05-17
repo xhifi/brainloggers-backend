@@ -49,7 +49,6 @@ module.exports = async (req, res, next) => {
     }
 
     const decoded = tokenService.verifyToken(token); // Verifies signature and expiration
-    console.log(decoded);
 
     // Fetch fresh user data to ensure roles/status are up-to-date and user exists
     // Note: Fetching user on every request can add latency. Consider if roles in token are sufficient.

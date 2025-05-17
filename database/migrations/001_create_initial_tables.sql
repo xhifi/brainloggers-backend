@@ -241,6 +241,70 @@ CREATE TABLE subscriber_tags (
   UNIQUE(subscriber_id, tag_id)
 );
 
+-- =====================================================
+-- BLOGGING SYSTEM TABLES
+-- =====================================================
+
+-- Create blog posts table
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) NOT NULL UNIQUE,
+  description TEXT,
+  content_key VARCHAR(255) NOT NULL, -- S3 key for the markdown file
+  layout VARCHAR(100) NOT NULL DEFAULT 'default', -- Layout template to use for rendering
+  status VARCHAR(20) NOT NULL DEFAULT 'draft', -- draft, published, archived
+  published_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Create blog post authors (many-to-many relationship)
+CREATE TABLE IF NOT EXISTS blog_post_authors (
+  post_id INTEGER NOT NULL REFERENCES blog_posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  contribution_type VARCHAR(50) DEFAULT 'editor', -- editor, reviewer, etc.
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (post_id, user_id)
+);
+
+-- Create tags for blog posts
+CREATE TABLE IF NOT EXISTS blog_post_tags (
+  post_id INTEGER NOT NULL REFERENCES blog_posts(id) ON DELETE CASCADE,
+  tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (post_id, tag_id)
+);
+
+-- Create comments table for blog posts
+CREATE TABLE IF NOT EXISTS blog_comments (
+  id SERIAL PRIMARY KEY,
+  post_id INTEGER NOT NULL REFERENCES blog_posts(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  parent_id INTEGER REFERENCES blog_comments(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  is_approved BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Add blog post slug redirects table
+-- This allows handling redirects when a post's slug changes
+
+CREATE TABLE IF NOT EXISTS blog_post_slug_redirects (
+    id SERIAL PRIMARY KEY,
+    old_slug VARCHAR(255) NOT NULL UNIQUE,
+    new_slug VARCHAR(255) NOT NULL,
+    post_id INTEGER NOT NULL REFERENCES blog_posts(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+
+
+
 -- --- Indexes for Performance ---
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_verification_token ON users(verification_token);
@@ -293,6 +357,9 @@ CREATE INDEX idx_tags_type ON tags(type);
 CREATE INDEX idx_subscriber_tags_subscriber_id ON subscriber_tags(subscriber_id);
 CREATE INDEX idx_subscriber_tags_tag_id ON subscriber_tags(tag_id);
 
+-- Create index for blog_post_slug_redirects
+CREATE INDEX IF NOT EXISTS idx_blog_post_slug_redirects_old_slug ON blog_post_slug_redirects(old_slug);
+CREATE INDEX IF NOT EXISTS idx_blog_post_slug_redirects_post_id ON blog_post_slug_redirects(post_id);
 
 -- --- Trigger function to automatically update 'updated_at' column ---
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -311,6 +378,14 @@ $$ language 'plpgsql';
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_roles_updated_at BEFORE UPDATE ON roles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_permissions_updated_at BEFORE UPDATE ON permissions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_blog_posts_updated_at BEFORE UPDATE ON blog_posts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_blog_comments_updated_at BEFORE UPDATE ON blog_comments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_blog_post_slug_redirects_updated_at BEFORE UPDATE ON blog_post_slug_redirects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_email_templates_updated_at BEFORE UPDATE ON email_templates FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_subscribers_updated_at BEFORE UPDATE ON subscribers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_mailing_lists_updated_at BEFORE UPDATE ON mailing_lists FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_email_campaigns_updated_at BEFORE UPDATE ON email_campaigns FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_tags_updated_at BEFORE UPDATE ON tags FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 
 -- --- Optional: Seed initial data (uncomment and modify if needed) ---
@@ -323,39 +398,71 @@ ON CONFLICT (name) DO NOTHING;
 
 -- *** UPDATED: Insert Permissions with resource and action ***
 INSERT INTO permissions (resource, action, description) VALUES
-  ('users', 'create', 'Can create new users'),
-  ('users', 'read_all', 'Can read list of all users'),
-  ('users', 'read_any', 'Can read profile of any specific user'),
-  ('users', 'read_own', 'Can read own user profile'),
-  ('users', 'update_any', 'Can update profile of any user (subject to same-role rule)'),
-  ('users', 'update_own', 'Can update own user profile'),
-  ('users', 'delete_any', 'Can delete any user'),
-  ('roles', 'manage', 'Can manage roles and assign permissions'),
-  ('permissions', 'manage', 'Can manage permissions definitions'),
-  -- S3 Storage permissions
-  ('storage', 'read', 'Can read files from S3 storage'),
-  ('storage', 'write', 'Can upload and update files in S3 storage'),
-  ('storage', 'delete', 'Can delete files and folders in S3 storage'),
-  ('storage', 'list', 'Can list files and folders in S3 storage'),
-  ('storage', 'admin', 'Has full control over S3 storage operations')
-  -- subscription permissions
-  ('subscriptions', 'read', 'Can view subscription lists and details'),
-  ('subscriptions', 'create', 'Can add new subscribers'),
-  ('subscriptions', 'update', 'Can update subscriber information'),
-  ('subscriptions', 'delete', 'Can delete subscribers'),
-  ('subscriptions', 'import', 'Can import subscribers from CSV files or content'),
-  ('subscriptions', 'export', 'Can export subscribers to CSV'),
-  -- tag management permissions
-  ('tags', 'read', 'Can view tags and tagged subscribers'),
-  ('tags', 'create', 'Can create new tags'),
-  ('tags', 'update', 'Can update tag information'),
-  ('tags', 'delete', 'Can delete tags'),
-  ('tags', 'assign', 'Can assign tags to subscribers'),
-  ('tags', 'unassign', 'Can remove tags from subscribers')
+    ('users', 'create', 'Can create new users'),
+    ('users', 'read_all', 'Can read list of all users'),
+    ('users', 'read_any', 'Can read profile of any specific user'),
+    ('users', 'read_own', 'Can read own user profile'),
+    ('users', 'update_any', 'Can update profile of any user (subject to same-role rule)'),
+    ('users', 'update_own', 'Can update own user profile'),
+    ('users', 'delete_any', 'Can delete any user'),
+    ('roles', 'manage', 'Can manage roles and assign permissions'),
+    ('permissions', 'manage', 'Can manage permissions definitions'),
+    -- S3 Storage permissions
+    ('storage', 'read', 'Can read files from S3 storage'),
+    ('storage', 'write', 'Can upload and update files in S3 storage'),
+    ('storage', 'delete', 'Can delete files and folders in S3 storage'),
+    ('storage', 'list', 'Can list files and folders in S3 storage'),
+    ('storage', 'admin', 'Has full control over S3 storage operations')
+    -- subscription permissions
+    ('subscriptions', 'read', 'Can view subscription lists and details'),
+    ('subscriptions', 'create', 'Can add new subscribers'),
+    ('subscriptions', 'update', 'Can update subscriber information'),
+    ('subscriptions', 'delete', 'Can delete subscribers'),
+    ('subscriptions', 'import', 'Can import subscribers from CSV files or content'),
+    ('subscriptions', 'export', 'Can export subscribers to CSV'),
+    -- tag management permissions
+    ('tags', 'read', 'Can view tags and tagged subscribers'),
+    ('tags', 'create', 'Can create new tags'),
+    ('tags', 'update', 'Can update tag information'),
+    ('tags', 'delete', 'Can delete tags'),
+    ('tags', 'assign', 'Can assign tags to subscribers'),
+    ('tags', 'unassign', 'Can remove tags from subscribers'),
+    -- Add mailing list permissions
+    ('mailing-lists', 'create', 'Can create new mailing lists'),
+    ('mailing-lists', 'read', 'Can view mailing lists and their details'),
+    ('mailing-lists', 'update', 'Can update mailing list information'),
+    ('mailing-lists', 'delete', 'Can delete mailing lists'),
+    ('mailing-lists', 'manage-recipients', 'Can add/remove recipients from mailing lists'),
+    -- Add template permissions
+    ('templates', 'create', 'Can create new email templates'),
+    ('templates', 'read', 'Can view email templates'),
+    ('templates', 'update', 'Can update email templates'),
+    ('templates', 'delete', 'Can delete email templates'),
+    ('templates', 'preview', 'Can preview email templates'),
+    ('templates', 'duplicate', 'Can duplicate existing templates'),
+    -- Add campaign permissions
+    ('campaigns', 'create', 'Can create new email campaigns'),
+    ('campaigns', 'read', 'Can view email campaigns'),
+    ('campaigns', 'update', 'Can update campaign details'),
+    ('campaigns', 'delete', 'Can delete campaigns'),
+    ('campaigns', 'schedule', 'Can schedule campaigns for sending'),
+    ('campaigns', 'send', 'Can send campaigns immediately'),
+    ('campaigns', 'cancel', 'Can cancel scheduled campaigns'),
+    ('campaigns', 'analytics', 'Can view campaign analytics')
+    -- Add blog permissions
+    ('blog', 'create', 'Create blog post drafts'),
+    ('blog', 'read', 'Read blog posts'),
+    ('blog', 'update', 'Update blog posts'),
+    ('blog', 'delete', 'Delete blog posts'),
+    ('blog', 'publish', 'Publish blog posts'),
+    ('blog', 'comment', 'Comment on blog posts'),
+    ('blog', 'comment_moderate', 'Moderate blog comments');
   -- Add permissions for other resources like posts, settings etc.
   -- ('posts', 'create', 'Can create posts'),
   -- ('posts', 'publish', 'Can publish posts')
 ON CONFLICT (resource, action) DO NOTHING; -- Use new unique constraint
+
+
 
 -- Assign permissions to roles (Example: Admin gets all defined permissions)
 -- Note: This assumes permissions and roles exist. Run this after inserting them.
@@ -446,58 +553,73 @@ BEGIN
     END IF;
 END $$;
 
--- Example: Assign specific permissions to editor
+-- Assign all mailing list permissions to admin role
 DO $$
 DECLARE
-    editor_role_id int;
-    perm_ids int[]; -- Array to hold permission IDs
+    admin_role_id INTEGER;
 BEGIN
-    SELECT id INTO editor_role_id FROM roles WHERE name = 'editor';
-
-    IF editor_role_id IS NOT NULL THEN
-         -- Select IDs for specific permissions needed by editor
-         SELECT array_agg(id) INTO perm_ids FROM permissions WHERE
-            (resource = 'users' AND action = 'read_own') OR
-            (resource = 'users' AND action = 'update_own');
-            -- Add other editor permissions (e.g., posts:create, posts:publish)
-            -- (resource = 'posts' AND action = 'create') OR ...
-
-        IF perm_ids IS NOT NULL AND array_length(perm_ids, 1) > 0 THEN
-            -- Insert selected permissions for the editor role
-            INSERT INTO role_permissions (role_id, permission_id)
-            SELECT editor_role_id, permission_id
-            FROM unnest(perm_ids) AS permission_id -- Unnest array into rows
-            ON CONFLICT (role_id, permission_id) DO NOTHING;
-        ELSE
-             RAISE NOTICE 'No specific permissions found for editor seeding.';
-        END IF;
+    SELECT id INTO admin_role_id FROM roles WHERE name = 'admin';
+    
+    IF admin_role_id IS NOT NULL THEN
+        INSERT INTO role_permissions (role_id, permission_id)
+        SELECT admin_role_id, p.id
+        FROM permissions p 
+        WHERE p.resource = 'mailing-lists'
+        ON CONFLICT (role_id, permission_id) DO NOTHING;
     ELSE
-        RAISE NOTICE 'Editor role not found, skipping editor permission seeding.';
+        RAISE NOTICE 'Admin role not found, skipping mailing list permission assignment.';
     END IF;
 END $$;
 
+-- Assign all template permissions to admin role
+DO $$
+DECLARE
+    admin_role_id INTEGER;
+BEGIN
+    SELECT id INTO admin_role_id FROM roles WHERE name = 'admin';
+    
+    IF admin_role_id IS NOT NULL THEN
+        INSERT INTO role_permissions (role_id, permission_id)
+        SELECT admin_role_id, p.id
+        FROM permissions p 
+        WHERE p.resource = 'templates'
+        ON CONFLICT (role_id, permission_id) DO NOTHING;
+    ELSE
+        RAISE NOTICE 'Admin role not found, skipping template permission assignment.';
+    END IF;
+END $$;
 
-
-
--- Assign a default role to a newly created user (requires a trigger or application logic)
--- Example Trigger (more complex):
--- CREATE OR REPLACE FUNCTION assign_default_role()
--- RETURNS TRIGGER AS $$
--- DECLARE
---   default_role_id int;
--- BEGIN
---   SELECT id INTO default_role_id FROM roles WHERE name = 'viewer'; -- Or your default role name
---   IF default_role_id IS NOT NULL THEN
---     INSERT INTO user_roles (user_id, role_id) VALUES (NEW.id, default_role_id);
---   ELSE
---      RAISE WARNING 'Default role "viewer" not found, cannot assign to new user %', NEW.id;
---   END IF;
---   RETURN NEW;
--- END;
--- $$ LANGUAGE plpgsql;
-
--- CREATE TRIGGER trigger_assign_default_role
--- AFTER INSERT ON users
--- FOR EACH ROW
--- EXECUTE FUNCTION assign_default_role();
-
+-- Assign all campaign permissions to admin role
+DO $$
+DECLARE
+    admin_role_id INTEGER;
+BEGIN
+    SELECT id INTO admin_role_id FROM roles WHERE name = 'admin';
+    
+    IF admin_role_id IS NOT NULL THEN
+        INSERT INTO role_permissions (role_id, permission_id)
+        SELECT admin_role_id, p.id
+        FROM permissions p 
+        WHERE p.resource = 'campaigns'
+        ON CONFLICT (role_id, permission_id) DO NOTHING;
+    ELSE
+        RAISE NOTICE 'Admin role not found, skipping campaign permission assignment.';
+    END IF;
+END $$;
+-- Assign all blog permissions to admin role
+DO $$
+DECLARE
+    admin_role_id INTEGER;
+BEGIN
+    SELECT id INTO admin_role_id FROM roles WHERE name = 'admin';
+    
+    IF admin_role_id IS NOT NULL THEN
+        INSERT INTO role_permissions (role_id, permission_id)
+        SELECT admin_role_id, p.id
+        FROM permissions p 
+        WHERE p.resource = 'blog'
+        ON CONFLICT (role_id, permission_id) DO NOTHING;
+    ELSE
+        RAISE NOTICE 'Admin role not found, skipping campaign permission assignment.';
+    END IF;
+END $$;

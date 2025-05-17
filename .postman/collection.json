@@ -1,0 +1,1905 @@
+{
+  "info": {
+    "_postman_id": "bf6d7c74-e4e5-4a85-8e57-97108bd2e30b",
+    "name": "Auth App API Collection",
+    "description": "Complete API collection for auth-app-plain-sql-rbac-v2 with role-based access control (RBAC)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "Authentication and authorization endpoints",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"{{testUserName}}\",\n    \"email\": \"{{testUserEmail}}\",\n    \"password\": \"{{testUserPassword}}\",\n    \"confirmPassword\": \"{{testUserPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/register",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user account"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);",
+                  "if (jsonData.accessToken) {",
+                  "    pm.environment.set('accessToken', jsonData.accessToken);",
+                  "    console.log('Access token saved to environment');",
+                  "}",
+                  "",
+                  "// Extract user ID if available in the response",
+                  "if (jsonData.user && jsonData.user.id) {",
+                  "    pm.environment.set('currentUserId', jsonData.user.id);",
+                  "    console.log('User ID saved to environment');",
+                  "}",
+                  "",
+                  "// Extract and save refresh token from cookies",
+                  "const cookies = pm.cookies.getAll();",
+                  "const jidCookie = cookies.find(cookie => cookie.name === 'jid');",
+                  "if (jidCookie) {",
+                  "    pm.environment.set('refreshToken', jidCookie.value);",
+                  "    console.log('Refresh token cookie (jid) saved to environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testUserEmail}}\",\n    \"password\": \"{{testUserPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/login",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Authenticate a user and receive access token"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/verify-email?token={{verificationToken}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "verify-email"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{verificationToken}}",
+                  "description": "Email verification token sent to user's email"
+                }
+              ]
+            },
+            "description": "Verify a user's email address with token"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = JSON.parse(responseBody);",
+                  "if (jsonData.accessToken) {",
+                  "    pm.environment.set('accessToken', jsonData.accessToken);",
+                  "    console.log('Access token refreshed and saved to environment');",
+                  "}",
+                  "",
+                  "// Extract and update refresh token from cookies if present",
+                  "const cookies = pm.cookies.getAll();",
+                  "const jidCookie = cookies.find(cookie => cookie.name === 'jid');",
+                  "if (jidCookie) {",
+                  "    pm.environment.set('refreshToken', jidCookie.value);",
+                  "    console.log('Refresh token cookie (jid) updated in environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/refresh",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "Get a new access token using refresh token cookie"
+          },
+          "response": []
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{testUserEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/forgot-password",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            },
+            "description": "Request a password reset email"
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"{{resetToken}}\",\n    \"password\": \"{{newPassword}}\",\n    \"confirmPassword\": \"{{newPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/reset-password",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "reset-password"]
+            },
+            "description": "Reset password with token"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/auth/logout",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "Logout a user (invalidate tokens)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Management",
+      "description": "User profile and management endpoints with RBAC",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/me",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Get the current authenticated user's profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users?page={{page}}&limit={{limit}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Page number for pagination"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Number of results per page"
+                }
+              ]
+            },
+            "description": "Get a list of all users in the system (requires 'users:read_all' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "Get a specific user by ID (requires 'users:read_any' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{updatedEmail}}\",\n    \"firstName\": \"{{firstName}}\",\n    \"lastName\": \"{{lastName}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "Update a user's profile by ID (requires 'users:update_any' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/users/{{userId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            },
+            "description": "Delete a user account (Admin only)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Storage (S3)",
+      "description": "File and folder operations using S3 storage",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "{{filePath}}"
+                },
+                {
+                  "key": "folderPath",
+                  "value": "{{folderPath}}",
+                  "description": "Optional folder path to store file in",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/upload",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "upload"]
+            },
+            "description": "Upload a file to S3 (requires 'storage:write' permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/files/{{fileKey}}?presigned={{presigned}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "files", "{{fileKey}}"],
+              "query": [
+                {
+                  "key": "presigned",
+                  "value": "{{presigned}}",
+                  "description": "Set to true to get a presigned URL instead of file content"
+                }
+              ]
+            },
+            "description": "Get a file from S3 - download or get presigned URL"
+          },
+          "response": []
+        },
+        {
+          "name": "List Files",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/list?prefix={{prefix}}&recursive={{recursive}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "list"],
+              "query": [
+                {
+                  "key": "prefix",
+                  "value": "{{prefix}}",
+                  "description": "S3 prefix (folder path) to list"
+                },
+                {
+                  "key": "recursive",
+                  "value": "{{recursive}}",
+                  "description": "Whether to list recursively"
+                }
+              ]
+            },
+            "description": "List files and folders in S3"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/storage/files/{{fileKey}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["storage", "files", "{{fileKey}}"]
+            },
+            "description": "Delete a file from S3"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Permissions",
+      "description": "Permission management endpoints",
+      "item": [
+        {
+          "name": "Get All Permissions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/permissions",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["permissions"]
+            },
+            "description": "Get all available permissions in the system"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User Permissions",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/permissions/my-permissions",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["permissions", "my-permissions"]
+            },
+            "description": "Get all permissions for the current user"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Subscriptions",
+      "description": "Subscription management endpoints for public and admin users",
+      "item": [
+        {
+          "name": "Subscribe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{subscriberEmail}}\",\n    \"firstName\": \"{{firstName}}\",\n    \"lastName\": \"{{lastName}}\",\n    \"topics\": [\"newsletter\", \"updates\"]\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/subscriptions/subscribe",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["subscriptions", "subscribe"]
+            },
+            "description": "Subscribe to receive emails (public endpoint)"
+          },
+          "response": []
+        },
+        {
+          "name": "Unsubscribe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/subscriptions/unsubscribe?token={{unsubscribeToken}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["subscriptions", "unsubscribe"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{unsubscribeToken}}",
+                  "description": "Unsubscribe token from email link"
+                }
+              ]
+            },
+            "description": "Unsubscribe from emails using token (public endpoint)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Subscribers",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/subscriptions?page={{page}}&limit={{limit}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["subscriptions"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Page number for pagination"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Number of results per page"
+                }
+              ]
+            },
+            "description": "Get all subscribers (requires appropriate permission)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "description": "Tag management endpoints",
+      "item": [
+        {
+          "name": "Get All Tags",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/tags",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["tags"]
+            },
+            "description": "Get all tags in the system"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Tag",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"{{tagName}}\",\n    \"description\": \"{{tagDescription}}\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/tags",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["tags"]
+            },
+            "description": "Create a new tag"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Mailing Lists",
+      "description": "Mailing list management endpoints with complex filter criteria",
+      "item": [
+        {
+          "name": "List All Mailing Lists",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists?page=1&limit=10&sortBy=created_at&sortOrder=desc",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "created_at"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "isActive",
+                  "value": "true",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get all mailing lists with pagination"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Mailing List by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists/{{mailingListId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists", "{{mailingListId}}"]
+            },
+            "description": "Get a specific mailing list by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Single Tag Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"VIP Subscribers\",\n    \"description\": \"Subscribers with the VIP tag\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering subscribers by a single tag"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Multiple Tag Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"VIP Tech Enthusiasts\",\n    \"description\": \"Subscribers with both VIP and Tech Enthusiast tags\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1, 2]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering subscribers by multiple tags"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Email Domain Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Gmail Users\",\n    \"description\": \"Subscribers with Gmail email addresses\",\n    \"filterCriteria\": {\n        \"email\": {\n            \"contains\": \"@gmail.com\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering subscribers by email domain"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Name Contains Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Subscribers Named John\",\n    \"description\": \"Subscribers with 'John' in their name\",\n    \"filterCriteria\": {\n        \"name\": {\n            \"contains\": \"John\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering subscribers by a partial name match"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Date Range Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Recent Subscribers\",\n    \"description\": \"Subscribers who joined in the last 30 days\",\n    \"filterCriteria\": {\n        \"subscribed_at\": {\n            \"gte\": \"2025-04-14T00:00:00Z\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering subscribers by subscription date range"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Combined Tag and Date Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Recent VIPs\",\n    \"description\": \"VIP subscribers who joined in the last 3 months\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1]\n        },\n        \"subscribed_at\": {\n            \"gte\": \"2025-02-14T00:00:00Z\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list with combined tag and date range filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Metadata State Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"California Subscribers\",\n    \"description\": \"Subscribers from California\",\n    \"filterCriteria\": {\n        \"metadata\": {\n            \"state\": {\n                \"eq\": \"california\"\n            }\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering subscribers by metadata state field"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Metadata Interests Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Tech and Sports Fans\",\n    \"description\": \"Subscribers interested in both tech and sports\",\n    \"filterCriteria\": {\n        \"metadata\": {\n            \"interests\": {\n                \"contains\": [\"tech\", \"sports\"]\n            }\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering subscribers by metadata interests array"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Complex Multi-Criteria Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"California Tech VIPs\",\n    \"description\": \"VIP subscribers from California interested in tech who joined in 2025\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1, 2]\n        },\n        \"subscribed_at\": {\n            \"gte\": \"2025-01-01T00:00:00Z\"\n        },\n        \"metadata\": {\n            \"state\": {\n                \"eq\": \"california\"\n            },\n            \"interests\": {\n                \"contains\": [\"tech\"]\n            }\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list with complex multi-criteria filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Active Status Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Active Subscribers Only\",\n    \"description\": \"Only currently active subscribers\",\n    \"filterCriteria\": {\n        \"is_active\": {\n            \"eq\": true\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering only active subscribers"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Non-NULL Date of Birth Filter",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Subscribers with DOB\",\n    \"description\": \"Subscribers who have provided their date of birth\",\n    \"filterCriteria\": {\n        \"date_of_birth\": {\n            \"not_null\": true\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list filtering subscribers with non-NULL date of birth"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Mailing List Recipients",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists/{{mailingListId}}/recipients?page=1&limit=20",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists", "{{mailingListId}}", "recipients"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get recipients for a specific mailing list"
+          },
+          "response": []
+        },
+        {
+          "name": "Regenerate Mailing List Recipients",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists/{{mailingListId}}/regenerate",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists", "{{mailingListId}}", "regenerate"]
+            },
+            "description": "Regenerate recipients for a mailing list based on current criteria"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Mailing List",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Updated Mailing List\",\n    \"description\": \"Updated description\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1, 3]\n        },\n        \"email\": {\n            \"contains\": \"@gmail.com\"\n        }\n    },\n    \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists/{{mailingListId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists", "{{mailingListId}}"]
+            },
+            "description": "Update an existing mailing list"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Mailing List",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists/{{mailingListId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists", "{{mailingListId}}"]
+            },
+            "description": "Delete a mailing list (soft delete)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Campaigns",
+      "description": "Email campaign management endpoints",
+      "item": [
+        {
+          "name": "Create Campaign",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"My Test Campaign\",\n    \"description\": \"A test email marketing campaign\",\n    \"templateId\": 1,\n    \"fromEmail\": \"noreply@example.com\",\n    \"replyTo\": \"support@example.com\",\n    \"subject\": \"Special Offer for You!\",\n    \"templateVariables\": {\n        \"offerName\": \"Spring Sale\",\n        \"discount\": \"15%\",\n        \"expiryDate\": \"2023-06-30\"\n    },\n    \"mailingListIds\": [1],\n    \"trackOpens\": true,\n    \"trackClicks\": true\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns"]
+            },
+            "description": "Create a new email campaign"
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Campaigns",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns?page=1&limit=10&sort=name&order=asc&status=draft",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "sort",
+                  "value": "name"
+                },
+                {
+                  "key": "order",
+                  "value": "asc"
+                },
+                {
+                  "key": "status",
+                  "value": "draft"
+                }
+              ]
+            },
+            "description": "Get a paginated list of all campaigns with optional filters"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Campaign by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns/{{campaignId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}"]
+            },
+            "description": "Get a specific campaign by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Campaign",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Updated Campaign Name\",\n    \"description\": \"Updated campaign description\",\n    \"subject\": \"Updated Subject Line\",\n    \"templateVariables\": {\n        \"offerName\": \"Summer Sale\",\n        \"discount\": \"20%\",\n        \"expiryDate\": \"2023-07-31\"\n    },\n    \"mailingListIds\": [1, 2]\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns/{{campaignId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}"]
+            },
+            "description": "Update an existing campaign"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Campaign",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns/{{campaignId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}"]
+            },
+            "description": "Delete a campaign (soft delete)"
+          },
+          "response": []
+        },
+        {
+          "name": "Send Campaign",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns/{{campaignId}}/send",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}", "send"]
+            },
+            "description": "Send a campaign immediately to all recipients"
+          },
+          "response": []
+        },
+        {
+          "name": "Schedule Campaign",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"scheduledAt\": \"2023-06-15T10:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns/{{campaignId}}/schedule",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}", "schedule"]
+            },
+            "description": "Schedule a campaign for future delivery"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Campaign",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns/{{campaignId}}/cancel",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}", "cancel"]
+            },
+            "description": "Cancel a scheduled campaign"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Campaign Stats",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/campaigns/{{campaignId}}/stats",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["campaigns", "{{campaignId}}", "stats"]
+            },
+            "description": "Get statistics for a specific campaign"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Tracking",
+      "description": "Email tracking and analytics endpoints",
+      "item": [
+        {
+          "name": "Track Open",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/track/open?cid={{campaignId}}&rid={{recipientId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["track", "open"],
+              "query": [
+                {
+                  "key": "cid",
+                  "value": "{{campaignId}}",
+                  "description": "Campaign ID"
+                },
+                {
+                  "key": "rid",
+                  "value": "{{recipientId}}",
+                  "description": "Recipient ID"
+                }
+              ]
+            },
+            "description": "Track email opens via a tracking pixel"
+          },
+          "response": []
+        },
+        {
+          "name": "Track Click",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/track/click?url={{encodedUrl}}&cid={{campaignId}}&rid={{recipientId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["track", "click"],
+              "query": [
+                {
+                  "key": "url",
+                  "value": "{{encodedUrl}}",
+                  "description": "Encoded URL to redirect to"
+                },
+                {
+                  "key": "cid",
+                  "value": "{{campaignId}}",
+                  "description": "Campaign ID"
+                },
+                {
+                  "key": "rid",
+                  "value": "{{recipientId}}",
+                  "description": "Recipient ID"
+                }
+              ]
+            },
+            "description": "Track link clicks in emails and redirect to destination"
+          },
+          "response": []
+        },
+        {
+          "name": "Track Delivery Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"type\": \"delivery\",\n    \"campaignId\": {{campaignId}},\n    \"recipientId\": {{recipientId}},\n    \"data\": {\n        \"timestamp\": \"2023-05-14T12:34:56Z\",\n        \"messageId\": \"message-id-123456\"\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/track/delivery",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["track", "delivery"]
+            },
+            "description": "Record email delivery events (delivered, bounced, complained)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Blog",
+      "description": "Blog post management endpoints",
+      "item": [
+        {
+          "name": "Create Blog Post",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"title\": \"My First Blog Post\",\n    \"description\": \"This is a short description of the blog post\",\n    \"content\": \"# My First Blog Post\\n\\nThis is the content of my blog post written in Markdown format.\\n\\n## Section 1\\n\\nHere is some content for section 1.\\n\\n## Section 2\\n\\nHere is some content for section 2.\",\n    \"layout\": \"default\",\n    \"authorIds\": [\"{{currentUserId}}\"],\n    \"tagIds\": [1, 2]\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog"]
+            },
+            "description": "Create a new blog post draft"
+          },
+          "response": []
+        },
+        {
+          "name": "List Blog Posts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog?page=1&limit=10&status=published&sortBy=created_at&sortOrder=desc",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number for pagination"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Number of items per page"
+                },
+                {
+                  "key": "status",
+                  "value": "published",
+                  "description": "Filter posts by status (draft, published, archived)"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "created_at",
+                  "description": "Sort field (title, created_at, updated_at, published_at)"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "desc",
+                  "description": "Sort order (asc, desc)"
+                },
+                {
+                  "key": "tag",
+                  "value": null,
+                  "description": "Filter by tag name",
+                  "disabled": true
+                },
+                {
+                  "key": "author",
+                  "value": null,
+                  "description": "Filter by author ID",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List all blog posts with pagination and filtering"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Blog Post by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog/{{blogPostId}}?content=true",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog", "{{blogPostId}}"],
+              "query": [
+                {
+                  "key": "content",
+                  "value": "true",
+                  "description": "Whether to include markdown content"
+                }
+              ]
+            },
+            "description": "Get a specific blog post by its ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Blog Post by Slug",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog/by-slug/{{blogPostSlug}}?content=true",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog", "by-slug", "{{blogPostSlug}}"],
+              "query": [
+                {
+                  "key": "content",
+                  "value": "true",
+                  "description": "Whether to include markdown content"
+                }
+              ]
+            },
+            "description": "Get a specific blog post by its slug"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Blog Post",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"title\": \"Updated Blog Post Title\",\n    \"description\": \"Updated description of the blog post\",\n    \"content\": \"# Updated Content\\n\\nThis is the updated content of my blog post.\",\n    \"authorIds\": [\"{{currentUserId}}\"],\n    \"tagIds\": [1, 3]\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog/{{blogPostId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog", "{{blogPostId}}"]
+            },
+            "description": "Update an existing blog post"
+          },
+          "response": []
+        },
+        {
+          "name": "Publish Blog Post",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"publishedAt\": \"2025-05-15T12:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog/{{blogPostId}}/publish",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog", "{{blogPostId}}", "publish"]
+            },
+            "description": "Publish a blog post (requires publish permission)"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Blog Post",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog/{{blogPostId}}",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog", "{{blogPostId}}"]
+            },
+            "description": "Delete a blog post (soft delete)"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"content\": \"This is my comment on the blog post.\",\n    \"parentId\": null\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog/{{blogPostId}}/comments",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog", "{{blogPostId}}", "comments"]
+            },
+            "description": "Add a comment to a blog post"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Post Comments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/blog/{{blogPostId}}/comments?showUnapproved=false",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["blog", "{{blogPostId}}", "comments"],
+              "query": [
+                {
+                  "key": "showUnapproved",
+                  "value": "false",
+                  "description": "Whether to include unapproved comments (admin only)"
+                }
+              ]
+            },
+            "description": "Get all comments for a blog post"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "description": "System-related endpoints",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/health",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Check the health of the API"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": ["// Global pre-request script", "// You can add common pre-request logic here"]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script",
+          "// Common test logic can go here",
+          "",
+          "// Check for unauthorized responses and alert if token might be expired",
+          "if (pm.response.code === 401) {",
+          "    console.log('Unauthorized response received. Your token may have expired.');",
+          "}"
+        ]
+      }
+    }
+  ]
+}

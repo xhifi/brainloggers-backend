@@ -7,22 +7,28 @@ const express = require("express");
 const authRoutes = require("./auth.routes");
 const userRoutes = require("./user.routes");
 const s3Routes = require("./s3.routes");
-const subscriptionRoutes = require("./subscription.routes");
 const permissionRoutes = require("./permission.routes");
-const templateRoutes = require("./template.routes");
+const subscriptionRoutes = require("./subscription.routes");
+const tagRoutes = require("./tag.routes");
 const mailingListRoutes = require("./mailing-list.routes");
+const emailTemplateRoutes = require("./template.routes");
 const campaignRoutes = require("./campaign.routes");
+const trackingRoutes = require("./tracking.routes");
+const blogRoutes = require("./blog.routes");
 
 const router = express.Router();
 
 router.use(`/auth`, authRoutes);
 router.use(`/users`, userRoutes);
 router.use(`/storage`, s3Routes);
-router.use(`/subscriptions`, subscriptionRoutes);
 router.use(`/permissions`, permissionRoutes);
-router.use(`/templates`, templateRoutes);
+router.use(`/subscriptions`, subscriptionRoutes);
+router.use(`/tags`, tagRoutes);
 router.use(`/mailing-lists`, mailingListRoutes);
+router.use(`/email-templates`, emailTemplateRoutes);
 router.use(`/campaigns`, campaignRoutes);
+router.use(`/track`, trackingRoutes);
+router.use(`/blog`, blogRoutes);
 
 /**
  * @route GET /api/health

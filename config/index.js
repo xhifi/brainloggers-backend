@@ -43,10 +43,16 @@ module.exports = {
     url: process.env.RABBITMQ_URL,
     queue_email: "email_queue",
   },
+  QUEUE_NAMES: {
+    email: "email_queue",
+    campaign: "campaign_queue",
+    campaignStatus: "campaign_status_queue",
+  },
   jwt: {
     secret: process.env.JWT_SECRET,
     accessExpiration: process.env.JWT_ACCESS_EXPIRATION,
-    refreshExpirationDays: parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || "7", 10),
+    refreshExpirationDays:
+      process.env.NODE_ENV === "production" ? parseInt(process.env.JWT_REFRESH_EXPIRATION_DAYS || "7", 10) : parseInt("100m", 10),
     refreshCookieName: process.env.JWT_REFRESH_COOKIE_NAME || "jid",
   },
   aws: {

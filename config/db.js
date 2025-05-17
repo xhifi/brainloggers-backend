@@ -103,9 +103,45 @@ const closePool = async () => {
   }
 };
 
+/**
+ * Execute a series of database queries within a transaction
+ * @async
+ * @function transaction
+ * @param {Function} callback - Callback function that receives a client and executes queries
+ * @returns {Promise<*>} Result of the callback function
+ * @throws {Error} If the transaction fails
+ * @example
+ * // Using the transaction helper
+ * const result = await transaction(async (client) => {
+ *   const res1 = await client.query('INSERT INTO users(name) VALUES($1) RETURNING id', ['User 1']);
+ *   const res2 = await client.query('INSERT INTO profiles(user_id, bio) VALUES($1, $2)', [res1.rows[0].id, 'Bio']);
+ *   return res1.rows[0];
+ * });
+ */
+const transaction = async (callback) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await callback(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    logger.error("Transaction Error:", {
+      errorCode: error.code,
+      errorMessage: error.message,
+      stack: error.stack,
+    });
+    throw error; // Re-throw the error to be handled by the caller
+  } finally {
+    client.release();
+  }
+};
+
 module.exports = {
   pool, // Export pool for specific needs (e.g., listening to notifications)
   query, // Main query helper
   getClient, // Helper for transactions
+  transaction, // Transaction helper function
   disconnect: closePool, // Close pool function
 };

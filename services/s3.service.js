@@ -2,12 +2,21 @@
  * @module services/s3
  * @description Service for Amazon S3 storage operations (CRUD for files and folders)
  */
-const { PutObjectCommand, GetObjectCommand, DeleteObjectCommand, ListObjectsV2Command, CopyObjectCommand } = require("@aws-sdk/client-s3");
+const {
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+  CopyObjectCommand,
+  HeadObjectCommand,
+} = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { Readable } = require("stream");
 const config = require("../config");
 const logger = require("./logger.service");
 const { s3Client } = require("../config/aws");
+const { NotFound, NotFoundError } = require("../utils/errors");
+const ConflictResourceError = require("../utils/errors/ConfictResource");
 
 const bucketName = config.aws.s3BucketName;
 
@@ -30,6 +39,36 @@ const isS3Configured = () => {
 };
 
 /**
+ * Check if a file or folder exists in S3
+ * @async
+ * @function fileExists
+ * @param {string} key - S3 key of the file or folder to check
+ * @returns {Promise<boolean>} True if the file exists, false otherwise
+ */
+const fileExists = async (key) => {
+  if (!isS3Configured()) {
+    throw new Error("S3 is not properly configured");
+  }
+
+  try {
+    const params = {
+      Bucket: bucketName,
+      Key: key,
+    };
+
+    const command = new HeadObjectCommand(params);
+    await s3Client.send(command);
+    return true;
+  } catch (error) {
+    if (error.name === "NotFound" || error.name === "NoSuchKey") {
+      return false;
+    }
+    // If it's another type of error, re-throw it
+    throw error;
+  }
+};
+
+/**
  * Upload a file to S3 bucket directly from memory
  * @async
  * @function uploadFile
@@ -38,10 +77,11 @@ const isS3Configured = () => {
  * @param {string} fileData.originalname - Original file name
  * @param {string} fileData.mimetype - File MIME type
  * @param {string} [folderPath=''] - S3 folder path (optional)
+ * @param {boolean} [isPublic=false] - Whether the file should be publicly readable
  * @returns {Promise<Object>} Upload result with file details
  * @throws {Error} If the file upload fails
  */
-const uploadFile = async (fileData, folderPath = "") => {
+const uploadFile = async (fileData, folderPath = "", isPublic = false) => {
   if (!isS3Configured()) {
     throw new Error("S3 is not properly configured");
   }
@@ -50,13 +90,20 @@ const uploadFile = async (fileData, folderPath = "") => {
     // Create the S3 key (path) using the folder path and original filename
     const s3Key = folderPath ? `${folderPath.replace(/^\/*|\/*$/g, "")}/${fileData.originalname}` : fileData.originalname;
 
+    // Check if the file already exists
+    const exists = await fileExists(s3Key);
+    if (exists) {
+      throw new ConflictResourceError(`File already exists: ${s3Key}`);
+    }
+
     // Set up the S3 upload parameters using the buffer directly
     const params = {
       Bucket: bucketName,
       Key: s3Key,
       Body: fileData.buffer, // Use the buffer directly instead of reading from disk
       ContentType: fileData.mimetype,
-      // You can add other parameters like ACL, Metadata, etc. as needed
+      ACL: isPublic ? "public-read" : "private", // Set ACL based on isPublic parameter
+      // You can add other parameters like Metadata, etc. as needed
     };
 
     // Execute the upload command
@@ -79,6 +126,7 @@ const uploadFile = async (fileData, folderPath = "") => {
       size: fileData.size,
       mimetype: fileData.mimetype,
       originalName: fileData.originalname,
+      isPublic: isPublic,
     };
   } catch (error) {
     logger.error(`Error uploading file to S3: ${error.message}`, { error });
@@ -102,6 +150,21 @@ const createFolder = async (folderPath) => {
   try {
     // Normalize folder path to ensure it has trailing slash but no leading slash
     const normalizedPath = `${folderPath.replace(/^\/*|\/*$/g, "")}/`;
+
+    // Check if the folder already exists
+    // In S3, folders are virtual, so we need to use ListObjectsV2 with the folder prefix
+    const listParams = {
+      Bucket: bucketName,
+      Prefix: normalizedPath,
+      MaxKeys: 1,
+    };
+    const listCommand = new ListObjectsV2Command(listParams);
+    const listResult = await s3Client.send(listCommand);
+
+    if (listResult.Contents && listResult.Contents.length > 0) {
+      logger.error(`Folder already exists in S3: ${normalizedPath}`);
+      throw new ConflictResourceError(`Folder already exists: ${folderPath}`);
+    }
 
     // Create an empty object to represent the folder
     const params = {
@@ -139,6 +202,13 @@ const getFile = async (fileKey, generatePresignedUrl = false) => {
   }
 
   try {
+    // First check if the file exists
+    const exists = await fileExists(fileKey);
+    if (!exists) {
+      logger.error(`File not found in S3: ${fileKey}`);
+      throw new NotFound(`File not found: ${fileKey}`);
+    }
+
     const params = {
       Bucket: bucketName,
       Key: fileKey,
@@ -154,17 +224,46 @@ const getFile = async (fileKey, generatePresignedUrl = false) => {
         presignedUrl,
       };
     } else {
-      // Get the file content directly
+      // Get the file content directly with a timeout
       const command = new GetObjectCommand(params);
-      const response = await s3Client.send(command);
+
+      // Use Promise.race to implement a timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("S3 getFile operation timed out")), 5000); // 5 seconds timeout
+      });
+
+      const response = await Promise.race([s3Client.send(command), timeoutPromise]);
 
       // Convert the readable stream to a buffer
       const chunks = [];
       const stream = response.Body;
-
       if (stream instanceof Readable) {
-        for await (const chunk of stream) {
-          chunks.push(chunk);
+        const streamTimeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("S3 stream reading timed out")), 5000); // 5 seconds timeout
+        });
+
+        try {
+          await Promise.race([
+            (async () => {
+              for await (const chunk of stream) {
+                chunks.push(chunk);
+              }
+            })(),
+            streamTimeoutPromise,
+          ]);
+        } catch (error) {
+          if (error.message === "S3 stream reading timed out") {
+            logger.error(`Stream reading timed out for ${fileKey}`);
+            // Return empty content rather than failing completely
+            return {
+              key: fileKey,
+              content: Buffer.from(""),
+              contentType: "text/plain",
+              contentLength: 0,
+              error: "Content retrieval timed out",
+            };
+          }
+          throw error;
         }
       }
 
@@ -181,8 +280,16 @@ const getFile = async (fileKey, generatePresignedUrl = false) => {
       };
     }
   } catch (error) {
-    logger.error(`Error getting file from S3: ${error.message}`, { error });
-    throw error;
+    logger.error(`Error getting file from S3: ${error.message}`, { fileKey, error });
+
+    // Return empty content rather than failing completely
+    return {
+      key: fileKey,
+      content: Buffer.from(""),
+      contentType: "text/plain",
+      contentLength: 0,
+      error: error.message || "Unknown S3 error",
+    };
   }
 };
 
@@ -262,21 +369,30 @@ const listFiles = async (prefix = "", recursive = false) => {
  * @param {Object} fileData - New file data from multer memory storage
  * @param {Buffer} fileData.buffer - File content in memory
  * @param {string} fileData.mimetype - File MIME type
+ * @param {boolean} [isPublic=false] - Whether the file should be publicly readable
  * @returns {Promise<Object>} Update result with file details
  * @throws {Error} If the file update fails
  */
-const updateFile = async (fileKey, fileData) => {
+const updateFile = async (fileKey, fileData, isPublic = false) => {
   if (!isS3Configured()) {
     throw new Error("S3 is not properly configured");
   }
 
   try {
+    // First check if the file exists
+    const exists = await fileExists(fileKey);
+    if (!exists) {
+      logger.error(`File not found in S3: ${fileKey}`);
+      throw new NotFound(`File not found: ${fileKey}`);
+    }
+
     // Set up the S3 upload parameters with buffer
     const params = {
       Bucket: bucketName,
       Key: fileKey,
       Body: fileData.buffer, // Use the buffer directly instead of reading from disk
       ContentType: fileData.mimetype,
+      ACL: isPublic ? "public-read" : "private", // Set ACL based on isPublic parameter
     };
 
     // Execute the update command
@@ -298,6 +414,7 @@ const updateFile = async (fileKey, fileData) => {
       size: fileData.size,
       mimetype: fileData.mimetype,
       originalName: fileData.originalname,
+      isPublic: isPublic,
     };
   } catch (error) {
     logger.error(`Error updating file in S3: ${error.message}`, { error });
@@ -320,6 +437,13 @@ const moveFile = async (sourceKey, destinationKey) => {
   }
 
   try {
+    // Check if source file exists
+    const exists = await fileExists(sourceKey);
+    if (!exists) {
+      logger.error(`Source file not found in S3: ${sourceKey}`);
+      throw new NotFound(`Source file not found: ${sourceKey}`);
+    }
+
     // Copy the file to the new location
     const copyParams = {
       Bucket: bucketName,
@@ -365,6 +489,13 @@ const deleteFile = async (fileKey) => {
   }
 
   try {
+    // Check if file exists before attempting to delete
+    const exists = await fileExists(fileKey);
+    if (!exists) {
+      logger.error(`File not found in S3: ${fileKey}`);
+      throw new NotFound(`File not found: ${fileKey}`);
+    }
+
     const params = {
       Bucket: bucketName,
       Key: fileKey,
@@ -400,15 +531,36 @@ const deleteFolder = async (folderPath) => {
     // Normalize folder path to ensure it has trailing slash but no leading slash
     const normalizedPath = `${folderPath.replace(/^\/*|\/*$/g, "")}/`;
 
+    // Check if the folder exists using a list operation
+    // We do this instead of fileExists because folders are virtual in S3
+    const listParams = {
+      Bucket: bucketName,
+      Prefix: normalizedPath,
+      MaxKeys: 1,
+    };
+    const listCommand = new ListObjectsV2Command(listParams);
+    const listResult = await s3Client.send(listCommand);
+
+    if (!listResult.Contents || listResult.Contents.length === 0) {
+      logger.error(`Folder not found in S3: ${normalizedPath}`);
+      throw new NotFoundError(`Folder not found: ${folderPath}`);
+    }
+
     // List all objects in the folder
-    const listResult = await listFiles(normalizedPath, true);
-    const allObjects = [...listResult.files, { key: normalizedPath }]; // Include the folder itself
+    const folderContents = await listFiles(normalizedPath, true);
+    const allObjects = [...folderContents.files, { key: normalizedPath }]; // Include the folder itself
 
     // Delete each object
     const deletionResults = await Promise.all(
       allObjects.map(async (obj) => {
         try {
-          await deleteFile(obj.key);
+          // We don't want to double-check file existence here since we already listed the files
+          const deleteParams = {
+            Bucket: bucketName,
+            Key: obj.key,
+          };
+          const deleteCommand = new DeleteObjectCommand(deleteParams);
+          await s3Client.send(deleteCommand);
           return { key: obj.key, deleted: true };
         } catch (error) {
           logger.error(`Error deleting object ${obj.key}: ${error.message}`);
@@ -440,4 +592,5 @@ module.exports = {
   deleteFile,
   deleteFolder,
   isS3Configured,
+  fileExists,
 };

@@ -1,196 +1,192 @@
 /**
- * @module controllers/mailing-list
- * @description Controller for mailing list endpoints
+ * @module Controllers/MailingListController
+ * @description Controller for mailing list operations
  */
 const mailingListService = require("../services/mailing-list.service");
-const { BadRequest } = require("../utils/errors");
 const logger = require("../services/logger.service");
+const { BadRequest } = require("../utils/errors");
 
 /**
  * Create a new mailing list
- * @async
- * @function createMailingList
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-exports.createMailingList = async (req, res, next) => {
+async function createMailingList(req, res, next) {
   try {
-    const { name, description, sourceType, filterCriteria, tagFilter } = req.body;
     const userId = req.user.id;
+    const mailingListData = req.body;
 
-    if (!name) {
-      throw new BadRequest("Mailing list name is required");
-    }
-
-    const mailingList = await mailingListService.createMailingList(
-      {
-        name,
-        description,
-        sourceType,
-        filterCriteria,
-        tagFilter,
-      },
-      userId
-    );
+    const result = await mailingListService.createMailingList(mailingListData, userId);
 
     res.status(201).json({
       success: true,
-      data: mailingList,
+      message: "Mailing list created successfully",
+      data: result,
     });
   } catch (error) {
     next(error);
   }
-};
+}
 
 /**
- * Update an existing mailing list
- * @async
- * @function updateMailingList
+ * Get a mailing list by ID
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-exports.updateMailingList = async (req, res, next) => {
+async function getMailingListById(req, res, next) {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
 
-    const mailingList = await mailingListService.updateMailingList(id, req.body, userId);
+    if (!id || isNaN(parseInt(id))) {
+      throw new BadRequest("Invalid mailing list ID");
+    }
 
-    res.json({
+    const mailingList = await mailingListService.getMailingListById(parseInt(id));
+
+    res.status(200).json({
       success: true,
       data: mailingList,
     });
   } catch (error) {
     next(error);
   }
-};
+}
 
 /**
- * Delete a mailing list
- * @async
- * @function deleteMailingList
+ * List mailing lists with pagination and filtering
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-exports.deleteMailingList = async (req, res, next) => {
+async function listMailingLists(req, res, next) {
+  try {
+    const result = await mailingListService.listMailingLists(req.query);
+
+    res.status(200).json({
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Update a mailing list
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+async function updateMailingList(req, res, next) {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
 
-    await mailingListService.deleteMailingList(id);
+    if (!id || isNaN(parseInt(id))) {
+      throw new BadRequest("Invalid mailing list ID");
+    }
 
-    res.json({
+    const updateData = req.body;
+    const updatedMailingList = await mailingListService.updateMailingList(parseInt(id), updateData, userId);
+
+    res.status(200).json({
+      success: true,
+      message: "Mailing list updated successfully",
+      data: updatedMailingList,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Delete a mailing list (soft delete)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+async function deleteMailingList(req, res, next) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    if (!id || isNaN(parseInt(id))) {
+      throw new BadRequest("Invalid mailing list ID");
+    }
+
+    await mailingListService.deleteMailingList(parseInt(id), userId);
+
+    res.status(200).json({
       success: true,
       message: "Mailing list deleted successfully",
     });
   } catch (error) {
     next(error);
   }
-};
+}
 
 /**
- * Get a mailing list by ID
- * @async
- * @function getMailingListById
+ * Get recipients of a mailing list with pagination
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-exports.getMailingListById = async (req, res, next) => {
+async function getMailingListRecipients(req, res, next) {
   try {
     const { id } = req.params;
 
-    const mailingList = await mailingListService.getMailingListById(id);
+    if (!id || isNaN(parseInt(id))) {
+      throw new BadRequest("Invalid mailing list ID");
+    }
 
-    res.json({
+    const result = await mailingListService.getMailingListRecipients(parseInt(id), req.query);
+
+    res.status(200).json({
       success: true,
-      data: mailingList,
+      mailingList: result.mailingList,
+      data: result.data,
+      pagination: result.pagination,
     });
   } catch (error) {
     next(error);
   }
-};
+}
 
 /**
- * List mailing lists with pagination and filtering
- * @async
- * @function listMailingLists
+ * Regenerate recipients for a mailing list based on current filter criteria
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
-exports.listMailingLists = async (req, res, next) => {
-  try {
-    const { page, limit, search, isActive } = req.query;
-
-    const options = {
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-      search,
-      isActive: isActive !== undefined ? isActive === "true" : undefined,
-    };
-
-    const result = await mailingListService.listMailingLists(options);
-
-    res.json({
-      success: true,
-      ...result,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Get recipients of a mailing list
- * @async
- * @function getMailingListRecipients
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware function
- */
-exports.getMailingListRecipients = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { page, limit } = req.query;
-
-    const options = {
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-    };
-
-    const result = await mailingListService.getMailingListRecipients(id, options);
-
-    res.json({
-      success: true,
-      ...result,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Get available variables for a mailing list
- * @async
- * @function getMailingListVariables
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware function
- */
-exports.getMailingListVariables = async (req, res, next) => {
+async function regenerateRecipients(req, res, next) {
   try {
     const { id } = req.params;
 
-    const variables = await mailingListService.getMailingListVariables(id);
+    if (!id || isNaN(parseInt(id))) {
+      throw new BadRequest("Invalid mailing list ID");
+    }
 
-    res.json({
+    const updatedMailingList = await mailingListService.regenerateRecipients(parseInt(id));
+
+    res.status(200).json({
       success: true,
-      data: variables,
+      message: "Mailing list recipients regenerated successfully",
+      data: updatedMailingList,
     });
   } catch (error) {
     next(error);
   }
+}
+
+module.exports = {
+  createMailingList,
+  getMailingListById,
+  listMailingLists,
+  updateMailingList,
+  deleteMailingList,
+  getMailingListRecipients,
+  regenerateRecipients,
 };

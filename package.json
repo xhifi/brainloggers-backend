@@ -7,7 +7,14 @@
     "worker": "node --watch --env-file=.env worker.js",
     "init-db": "node --watch --env-file=.env database/seeders/init_db.js",
     "docs": "jsdoc -c jsdoc.json -r",
-    "clean-docs": "rimraf .docs"
+    "clean-docs": "rimraf .docs",
+    "seed-subscribers": "node --watch --env-file=.env database/seeders/run_mailing_list_seed.js",
+    "reset-subscribers": "node --env-file=.env database/seeders/reset_subscribers_seed.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest --testPathPattern=tests/unit",
+    "test:integration": "jest --testPathPattern=tests/integration"
   },
   "keywords": [],
   "author": "",
@@ -31,6 +38,7 @@
     "mjml": "^4.15.3",
     "multer": "^1.4.5-lts.2",
     "node-cache": "^5.1.2",
+    "node-cron": "^4.0.0",
     "nodemailer": "^6.10.1",
     "pg": "^8.15.6",
     "uuid": "^11.1.0",
@@ -38,9 +46,21 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
+    "@faker-js/faker": "^9.7.0",
     "clean-jsdoc-theme": "^4.3.0",
     "docdash": "^2.0.2",
+    "jest": "^29.7.0",
     "jsdoc": "^4.0.4",
-    "rimraf": "^5.0.10"
+    "rimraf": "^5.0.10",
+    "supertest": "^6.3.3"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ]
   }
 }

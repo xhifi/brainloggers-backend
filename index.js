@@ -5,13 +5,12 @@ const cors = require("cors"); // Import CORS
 const corsOptions = require("./config/cors"); // Import CORS options
 const config = require("./config");
 const apiRoutes = require("./routes"); // Assuming routes/index.js aggregates all routes under /api
-const errorHandler = require("./middleware/errorHandler");
+const { errorHandler } = require("./middleware/errorHandler");
 const startServer = require("./server/server");
 
 const app = express();
 
 // --- Essential Middleware ---
-
 // CORS Configuration
 // Allow requests from your frontend domain, including credentials (cookies)
 

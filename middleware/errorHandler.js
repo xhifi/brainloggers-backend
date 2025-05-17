@@ -4,6 +4,7 @@
  */
 const config = require("../config");
 const logger = require("../services/logger.service");
+const customErrors = require("../utils/errors");
 
 /**
  * Express error handling middleware that processes errors and returns appropriate responses
@@ -47,20 +48,11 @@ const errorHandler = (err, req, res, next) => {
   // Default error status code and message
   let statusCode = typeof err.statusCode === "number" && err.statusCode >= 400 && err.statusCode < 600 ? err.statusCode : 500; // Default to 500 if statusCode is invalid or missing
 
-  let message = err.expose // Check if error message is safe to expose (custom error property)
-    ? err.message
-    : "Internal Server Error"; // Default message
+  // Check if the error is one of our custom error classes
+  const isCustomError = Object.values(customErrors).some((ErrorClass) => err instanceof ErrorClass);
 
-  // Handle specific error types if needed (e.g., database constraint errors)
-  if (err.code === "23505") {
-    // Example: PostgreSQL unique violation
-    statusCode = 409; // Conflict
-    // Extract field name if possible (more complex parsing needed usually)
-    message = "Resource already exists or violates a unique constraint.";
-  }
-  // Add more specific error handling here (e.g., for custom error classes)
-  // if (err instanceof AuthorizationError) { statusCode = 403; message = err.message; }
-  // if (err instanceof NotFoundError) { statusCode = 404; message = err.message; }
+  // If it's a custom error, always show the message, otherwise use expose property
+  let message = isCustomError || err.expose ? err.message : "Internal Server Error"; // Default message
 
   // Prevent sending overly generic 500 messages if a more specific one was intended but status code was missing
   if (statusCode === 500 && err.message && err.expose) {
@@ -76,4 +68,4 @@ const errorHandler = (err, req, res, next) => {
   });
 };
 
-module.exports = errorHandler;
+module.exports = { errorHandler };

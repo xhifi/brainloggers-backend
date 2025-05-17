@@ -1,68 +1,107 @@
 /**
- * @module Routes/MailingLists
- * @description Routes for mailing list management
+ * @module Routes/MailingList
+ * @description Routes for managing mailing lists
  */
 const express = require("express");
-const router = express.Router();
 const mailingListController = require("../controllers/mailing-list.controller");
-const authenticate = require("../middleware/authenticate");
-const { hasAllPermissions } = require("../middleware/authorize");
 const { validate } = require("../middleware/validate");
-const { validateMailingList, validateUpdateMailingList } = require("../dtos/mailing-list.dto");
+const {
+  createMailingListSchema,
+  updateMailingListSchema,
+  listMailingListsSchema,
+  getMailingListSchema,
+  regenerateRecipientsSchema,
+} = require("../dtos/mailing-list.dto");
+const authenticate = require("../middleware/authenticate");
+const { hasAnyPermission } = require("../middleware/authorize");
 
-// Mailing list middleware groups
-const mailingListReadAccess = [authenticate, hasAllPermissions({ resource: "subscriptions", action: "read" })];
-const mailingListCreateAccess = [authenticate, hasAllPermissions({ resource: "subscriptions", action: "create" })];
-const mailingListUpdateAccess = [authenticate, hasAllPermissions({ resource: "subscriptions", action: "update" })];
-const mailingListDeleteAccess = [authenticate, hasAllPermissions({ resource: "subscriptions", action: "delete" })];
+const router = express.Router();
 
-/**
- * @route   GET /api/mailing-lists
- * @desc    List all mailing lists with pagination and filtering
- * @access  Private - Requires subscription:read permission
- */
-router.get("/", ...mailingListReadAccess, mailingListController.listMailingLists);
-
-/**
- * @route   GET /api/mailing-lists/:id
- * @desc    Get a specific mailing list by ID
- * @access  Private - Requires subscription:read permission
- */
-router.get("/:id", ...mailingListReadAccess, mailingListController.getMailingListById);
+// Apply authentication to all mailing list routes
+router.use(authenticate);
 
 /**
- * @route   POST /api/mailing-lists
- * @desc    Create a new mailing list
- * @access  Private - Requires subscription:create permission
+ * @route POST /api/mailing-lists
+ * @description Create a new mailing list
+ * @access Private (requires mailing-lists:create permission)
  */
-router.post("/", ...mailingListCreateAccess, validateMailingList, mailingListController.createMailingList);
+router.post(
+  "/",
+  hasAnyPermission({ resource: "mailing-lists", action: "create" }),
+  validate(createMailingListSchema),
+  mailingListController.createMailingList
+);
 
 /**
- * @route   PUT /api/mailing-lists/:id
- * @desc    Update an existing mailing list
- * @access  Private - Requires subscription:update permission
+ * @route GET /api/mailing-lists/:id
+ * @description Get a mailing list by ID
+ * @access Private (requires mailing-lists:read permission)
  */
-router.put("/:id", ...mailingListUpdateAccess, validateUpdateMailingList, mailingListController.updateMailingList);
+router.get(
+  "/:id",
+  hasAnyPermission({ resource: "mailing-lists", action: "read" }),
+  validate(getMailingListSchema),
+  mailingListController.getMailingListById
+);
 
 /**
- * @route   DELETE /api/mailing-lists/:id
- * @desc    Delete (soft delete) a mailing list
- * @access  Private - Requires subscription:delete permission
+ * @route GET /api/mailing-lists
+ * @description List mailing lists with pagination and filtering
+ * @access Private (requires mailing-lists:read permission)
  */
-router.delete("/:id", ...mailingListDeleteAccess, mailingListController.deleteMailingList);
+router.get(
+  "/",
+  hasAnyPermission({ resource: "mailing-lists", action: "read" }),
+  validate(listMailingListsSchema),
+  mailingListController.listMailingLists
+);
 
 /**
- * @route   GET /api/mailing-lists/:id/recipients
- * @desc    Get recipients of a mailing list
- * @access  Private - Requires subscription:read permission
+ * @route PUT /api/mailing-lists/:id
+ * @description Update an existing mailing list
+ * @access Private (requires mailing-lists:update permission)
  */
-router.get("/:id/recipients", ...mailingListReadAccess, mailingListController.getMailingListRecipients);
+router.put(
+  "/:id",
+  hasAnyPermission({ resource: "mailing-lists", action: "update" }),
+  validate(updateMailingListSchema),
+  mailingListController.updateMailingList
+);
 
 /**
- * @route   GET /api/mailing-lists/:id/variables
- * @desc    Get variables available for a mailing list
- * @access  Private - Requires subscription:read permission
+ * @route DELETE /api/mailing-lists/:id
+ * @description Delete a mailing list (soft delete)
+ * @access Private (requires mailing-lists:delete permission)
  */
-router.get("/:id/variables", ...mailingListReadAccess, mailingListController.getMailingListVariables);
+router.delete(
+  "/:id",
+  hasAnyPermission({ resource: "mailing-lists", action: "delete" }),
+  validate(getMailingListSchema),
+  mailingListController.deleteMailingList
+);
+
+/**
+ * @route GET /api/mailing-lists/:id/recipients
+ * @description Get recipients of a mailing list with pagination
+ * @access Private (requires mailing-lists:read permission)
+ */
+router.get(
+  "/:id/recipients",
+  hasAnyPermission({ resource: "mailing-lists", action: "read" }),
+  validate(getMailingListSchema),
+  mailingListController.getMailingListRecipients
+);
+
+/**
+ * @route POST /api/mailing-lists/:id/regenerate
+ * @description Regenerate recipients for a mailing list based on current filter criteria
+ * @access Private (requires mailing-lists:update permission)
+ */
+router.post(
+  "/:id/regenerate",
+  hasAnyPermission({ resource: "mailing-lists", action: "update" }),
+  validate(regenerateRecipientsSchema),
+  mailingListController.regenerateRecipients
+);
 
 module.exports = router;

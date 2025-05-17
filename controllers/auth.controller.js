@@ -55,7 +55,7 @@ const clearRefreshTokenCookie = (res) => {
  */
 exports.register = async (req, res, next) => {
   const { name, email, password, confirmPassword } = req.body;
-  console.log(req.body);
+
   try {
     const userExists = await userService.findUserByEmail(email);
     if (userExists) {

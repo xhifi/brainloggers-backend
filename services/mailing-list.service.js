@@ -1,593 +1,608 @@
 /**
- * @module services/mailing-list
- * @description Service for managing mailing lists and their recipients
- * @category Services
- * @subcategory Mailing List
+ * @module Services/MailingListService
+ * @description Service for managing mailing lists and subscribers
  */
 const db = require("../config/db");
 const logger = require("./logger.service");
-const { NotFound, BadRequest } = require("../utils/errors");
-const tagService = require("./tag.service");
-const subscriptionService = require("./subscription.service");
+const { NotFound, ConfictResource } = require("../utils/errors");
 
 /**
- * Create a new mailing list
- * @async
- * @function createMailingList
- * @memberof module:services/mailing-list
- * @param {Object} mailingListData - Mailing list data
- * @param {string} mailingListData.name - Name of the mailing list
- * @param {string} [mailingListData.description] - Optional description
- * @param {string} [mailingListData.sourceType='subscribers'] - Source type ('subscribers', 'users', 'mixed')
- * @param {Object} [mailingListData.filterCriteria] - Optional filter criteria
- * @param {Object} [mailingListData.tagFilter] - Optional tag filter
- * @param {string} userId - User ID who is creating the mailing list
- * @returns {Promise<Object>} Created mailing list
+ * Create a new mailing list and populate recipients based on filter criteria
+ * @param {Object} mailingListData - Data for creating a new mailing list
+ * @param {UUID} userId - ID of the user creating the mailing list
+ * @returns {Promise<Object>} - Created mailing list with recipients count
  */
-const createMailingList = async (mailingListData, userId) => {
-  const { name, description, sourceType = "subscribers", filterCriteria, tagFilter } = mailingListData;
-
-  // Validate required fields
-  if (!name) {
-    throw new BadRequest("Mailing list name is required");
-  }
-
+async function createMailingList(mailingListData, userId) {
+  const client = await db.getClient();
   try {
-    const query = `
-      INSERT INTO mailing_lists (
-        name, 
-        description, 
-        source_type, 
-        filter_criteria, 
-        tag_filter,
-        created_by, 
-        updated_by
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING *
-    `;
+    await client.query("BEGIN");
 
-    const values = [
-      name,
-      description || null,
-      sourceType,
-      filterCriteria ? JSON.stringify(filterCriteria) : null,
-      tagFilter ? JSON.stringify(tagFilter) : null,
-      userId,
-      userId,
-    ];
+    // Insert mailing list record
+    const mailingListResult = await client.query(
+      `INSERT INTO mailing_lists 
+      (name, description, source_type, filter_criteria, created_by, updated_by)
+      VALUES ($1, $2, $3, $4, $5, $5)
+      RETURNING id, name, description, source_type, filter_criteria, is_active, created_at`,
+      [
+        mailingListData.name,
+        mailingListData.description || null,
+        "subscribers", // Currently only supporting subscribers as source
+        JSON.stringify(mailingListData.filterCriteria || {}),
+        userId,
+      ]
+    );
 
-    const result = await db.query(query, values);
-    const mailingList = result.rows[0];
+    const mailingList = mailingListResult.rows[0];
 
-    // If tagFilter is provided, fetch recipients based on tags
-    if (mailingList && tagFilter && Object.keys(tagFilter).length > 0) {
-      await updateMailingListRecipients(mailingList.id, sourceType, tagFilter);
+    // Build query to find subscribers matching filter criteria
+    const { query, params } = buildFilterQuery(mailingListData.filterCriteria || {});
+
+    // Get subscribers that match the filter criteria
+    const subscribersResult = await client.query(query, params);
+    const subscribers = subscribersResult.rows;
+
+    // Insert recipients into mailing_list_recipients table
+    if (subscribers.length > 0) {
+      const insertPromises = subscribers.map((subscriber) =>
+        client.query(
+          `INSERT INTO mailing_list_recipients 
+          (mailing_list_id, recipient_type, recipient_id)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (mailing_list_id, recipient_type, recipient_id) DO NOTHING`,
+          [mailingList.id, "subscriber", subscriber.id]
+        )
+      );
+
+      await Promise.all(insertPromises);
     }
 
-    return transformMailingListFromDb(mailingList);
+    // Commit the transaction
+    await client.query("COMMIT");
+
+    // Return the created mailing list with recipient count
+    return {
+      ...mailingList,
+      recipientCount: subscribers.length,
+    };
   } catch (error) {
+    await client.query("ROLLBACK");
     logger.error("Error creating mailing list:", error);
+
+    if (error.code === "23505") {
+      throw new ConfictResource("A mailing list with this name already exists");
+    }
+
     throw error;
+  } finally {
+    client.release();
   }
-};
+}
 
 /**
- * Update an existing mailing list
- * @async
- * @function updateMailingList
- * @memberof module:services/mailing-list
- * @param {number} id - Mailing list ID
- * @param {Object} mailingListData - Updated mailing list data
- * @param {string} [mailingListData.name] - Name of the mailing list
- * @param {string} [mailingListData.description] - Description
- * @param {string} [mailingListData.sourceType] - Source type ('subscribers', 'users', 'mixed')
- * @param {Object} [mailingListData.filterCriteria] - Filter criteria
- * @param {Object} [mailingListData.tagFilter] - Tag filter
- * @param {boolean} [mailingListData.isActive] - Active status
- * @param {string} userId - User ID who is updating the mailing list
- * @returns {Promise<Object>} Updated mailing list
+ * Build a parameterized SQL query based on filter criteria
+ * @param {Object} filterCriteria - Filter criteria from the request
+ * @returns {Object} - SQL query and parameters
  */
-const updateMailingList = async (id, mailingListData, userId) => {
-  // Check if mailing list exists
-  const existingMailingList = await getMailingListById(id);
+function buildFilterQuery(filterCriteria) {
+  // Start with base query that gets all active subscribers
+  let query = `
+    SELECT s.* 
+    FROM subscribers s
+    WHERE s.is_active = TRUE
+  `;
 
-  // Build update query dynamically based on provided fields
-  const updateFields = [];
-  const values = [];
-  let paramCount = 1;
+  const params = [];
+  let paramIndex = 1;
 
-  if (mailingListData.name !== undefined) {
-    updateFields.push(`name = $${paramCount++}`);
-    values.push(mailingListData.name);
-  }
-
-  if (mailingListData.description !== undefined) {
-    updateFields.push(`description = $${paramCount++}`);
-    values.push(mailingListData.description);
-  }
-
-  if (mailingListData.sourceType !== undefined) {
-    updateFields.push(`source_type = $${paramCount++}`);
-    values.push(mailingListData.sourceType);
-  }
-
-  if (mailingListData.filterCriteria !== undefined) {
-    updateFields.push(`filter_criteria = $${paramCount++}`);
-    values.push(JSON.stringify(mailingListData.filterCriteria));
-  }
-
-  if (mailingListData.tagFilter !== undefined) {
-    updateFields.push(`tag_filter = $${paramCount++}`);
-    values.push(JSON.stringify(mailingListData.tagFilter));
-  }
-
-  if (mailingListData.isActive !== undefined) {
-    updateFields.push(`is_active = $${paramCount++}`);
-    values.push(mailingListData.isActive);
-  }
-
-  // Add updated_by and updated_at
-  updateFields.push(`updated_by = $${paramCount++}`);
-  values.push(userId);
-  updateFields.push(`updated_at = NOW()`);
-
-  // Add mailing list ID to the values array
-  values.push(id);
-
-  // Prepare and execute the update query
-  try {
-    const query = `
-      UPDATE mailing_lists
-      SET ${updateFields.join(", ")}
-      WHERE id = $${paramCount} AND is_deleted = false
-      RETURNING *
+  // Handle tag filtering
+  if (filterCriteria.tags && filterCriteria.tags.contains && filterCriteria.tags.contains.length > 0) {
+    const tagIds = filterCriteria.tags.contains;
+    // Use a subquery to check if a subscriber has all the required tags
+    query += `
+      AND (
+        SELECT COUNT(DISTINCT st.tag_id) 
+        FROM subscriber_tags st 
+        WHERE st.subscriber_id = s.id 
+        AND st.tag_id IN (${tagIds.map(() => `$${paramIndex++}`).join(", ")})
+      ) = $${paramIndex++}
     `;
 
-    const result = await db.query(query, values);
-
-    if (result.rows.length === 0) {
-      throw new NotFound("Mailing list not found or already deleted");
-    }
-
-    const updatedMailingList = result.rows[0];
-
-    // If tagFilter was updated, update the recipients
-    if (mailingListData.tagFilter !== undefined) {
-      await updateMailingListRecipients(id, updatedMailingList.source_type, updatedMailingList.tag_filter);
-    }
-
-    return transformMailingListFromDb(updatedMailingList);
-  } catch (error) {
-    logger.error(`Error updating mailing list ${id}:`, error);
-    throw error;
+    // Add each tag ID as a parameter
+    params.push(...tagIds);
+    // Add the count of tag IDs as a parameter to ensure ALL required tags are present
+    params.push(tagIds.length);
   }
-};
+
+  // Process standard subscriber fields
+  const standardFields = ["name", "email", "date_of_birth", "is_active", "subscribed_at", "unsubscribed_at", "created_at", "updated_at"];
+
+  standardFields.forEach((field) => {
+    if (filterCriteria[field]) {
+      const condition = buildCondition(`s.${field}`, filterCriteria[field], paramIndex, params);
+      query += condition.sql;
+      paramIndex = condition.nextParamIndex;
+    }
+  });
+
+  // Handle metadata fields
+  if (filterCriteria.metadata) {
+    // For state field in metadata
+    if (filterCriteria.metadata.state) {
+      const condition = buildJsonCondition("s.metadata", "state", filterCriteria.metadata.state, paramIndex, params);
+      query += condition.sql;
+      paramIndex = condition.nextParamIndex;
+    }
+
+    // For interests array in metadata
+    if (filterCriteria.metadata.interests && filterCriteria.metadata.interests.contains) {
+      const interests = filterCriteria.metadata.interests.contains;
+      interests.forEach((interest) => {
+        query += ` AND s.metadata->>'interests' ? $${paramIndex++}`;
+        params.push(interest);
+      });
+    }
+  }
+
+  return { query, params };
+}
 
 /**
- * Update the recipients of a mailing list based on tag filters
- * @async
- * @function updateMailingListRecipients
- * @memberof module:services/mailing-list
- * @param {number} mailingListId - Mailing list ID
- * @param {string} sourceType - Source type ('subscribers', 'users', 'mixed')
- * @param {Object} tagFilter - Tag filter criteria
- * @returns {Promise<void>}
+ * Build SQL condition for a specific field based on operator
+ * @param {string} field - Database field name
+ * @param {Object} condition - Condition object with operator and value
+ * @param {number} startParamIndex - Starting parameter index
+ * @param {Array} params - Array of parameters to append to
+ * @returns {Object} - SQL fragment and next parameter index
  */
-const updateMailingListRecipients = async (mailingListId, sourceType, tagFilter) => {
-  try {
-    // First, clear existing recipients
-    await db.query("DELETE FROM mailing_list_recipients WHERE mailing_list_id = $1", [mailingListId]);
+function buildCondition(field, condition, startParamIndex, params) {
+  let sql = "";
+  let paramIndex = startParamIndex;
 
-    // Skip if no tag filter
-    if (!tagFilter) return;
-
-    // Parse tag filter if it's a string
-    const parsedTagFilter = typeof tagFilter === "string" ? JSON.parse(tagFilter) : tagFilter;
-
-    // Get tag IDs from filter
-    const tagIds = Array.isArray(parsedTagFilter.tagIds) ? parsedTagFilter.tagIds : [];
-    if (tagIds.length === 0) return;
-
-    // For subscribers (default case)
-    if (sourceType === "subscribers" || sourceType === "mixed") {
-      // Get subscribers with the specified tags
-      const subscribersQuery = `
-        SELECT DISTINCT s.id 
-        FROM subscribers s
-        JOIN subscriber_tags st ON s.id = st.subscriber_id
-        WHERE st.tag_id = ANY($1::int[])
-        AND s.is_active = true
-      `;
-
-      const subscribersResult = await db.query(subscribersQuery, [tagIds]);
-
-      // Add subscribers to mailing list recipients
-      if (subscribersResult.rows.length > 0) {
-        const insertValues = subscribersResult.rows
-          .map((row) => {
-            return `(${mailingListId}, 'subscriber', ${row.id})`;
-          })
-          .join(", ");
-
-        const insertQuery = `
-          INSERT INTO mailing_list_recipients (mailing_list_id, recipient_type, recipient_id)
-          VALUES ${insertValues}
-          ON CONFLICT (mailing_list_id, recipient_type, recipient_id) DO NOTHING
-        `;
-
-        await db.query(insertQuery);
-      }
-    }
-
-    // For users - implementation could be similar if users can have tags
-    if (sourceType === "users" || sourceType === "mixed") {
-      // Implementation for users would go here
-      // For now, this is a placeholder
-    }
-  } catch (error) {
-    logger.error(`Error updating mailing list recipients for list ${mailingListId}:`, error);
-    throw error;
+  // Handle each type of operator
+  if (condition.eq !== undefined) {
+    sql = ` AND ${field} = $${paramIndex++}`;
+    params.push(condition.eq);
+  } else if (condition.neq !== undefined) {
+    sql = ` AND ${field} != $${paramIndex++}`;
+    params.push(condition.neq);
+  } else if (condition.contains !== undefined) {
+    sql = ` AND ${field} ILIKE $${paramIndex++}`;
+    params.push(`%${condition.contains}%`);
+  } else if (condition.gte !== undefined) {
+    sql = ` AND ${field} >= $${paramIndex++}`;
+    params.push(condition.gte);
+  } else if (condition.lte !== undefined) {
+    sql = ` AND ${field} <= $${paramIndex++}`;
+    params.push(condition.lte);
+  } else if (condition.not_null === true) {
+    sql = ` AND ${field} IS NOT NULL`;
+  } else if (condition.null === true) {
+    sql = ` AND ${field} IS NULL`;
   }
-};
+
+  return { sql, nextParamIndex: paramIndex };
+}
 
 /**
- * Delete a mailing list (soft delete)
- * @async
- * @function deleteMailingList
- * @memberof module:services/mailing-list
+ * Build SQL condition for JSON/JSONB field
+ * @param {string} jsonField - Database JSON field name
+ * @param {string} jsonKey - Key in the JSON object
+ * @param {Object} condition - Condition object with operator and value
+ * @param {number} startParamIndex - Starting parameter index
+ * @param {Array} params - Array of parameters to append to
+ * @returns {Object} - SQL fragment and next parameter index
+ */
+function buildJsonCondition(jsonField, jsonKey, condition, startParamIndex, params) {
+  let sql = "";
+  let paramIndex = startParamIndex;
+
+  if (condition.eq !== undefined) {
+    sql = ` AND ${jsonField}->>'${jsonKey}' = $${paramIndex++}`;
+    params.push(condition.eq);
+  } else if (condition.neq !== undefined) {
+    sql = ` AND ${jsonField}->>'${jsonKey}' != $${paramIndex++}`;
+    params.push(condition.neq);
+  } else if (condition.contains !== undefined) {
+    sql = ` AND ${jsonField}->>'${jsonKey}' ILIKE $${paramIndex++}`;
+    params.push(`%${condition.contains}%`);
+  } else if (condition.not_null === true) {
+    sql = ` AND ${jsonField}->>'${jsonKey}' IS NOT NULL`;
+  } else if (condition.null === true) {
+    sql = ` AND ${jsonField}->>'${jsonKey}' IS NULL`;
+  }
+
+  return { sql, nextParamIndex: paramIndex };
+}
+
+/**
+ * Get mailing list by ID with recipient count
  * @param {number} id - Mailing list ID
- * @returns {Promise<boolean>} Success status
+ * @returns {Promise<Object>} - Mailing list with recipient count
  */
-const deleteMailingList = async (id) => {
-  try {
-    const query = `
-      UPDATE mailing_lists
-      SET is_deleted = true, updated_at = NOW()
-      WHERE id = $1 AND is_deleted = false
-      RETURNING id
-    `;
+async function getMailingListById(id) {
+  // Get mailing list record
+  const mailingListResult = await db.query(
+    `SELECT ml.*, u.email as created_by_email
+     FROM mailing_lists ml
+     LEFT JOIN users u ON ml.created_by = u.id
+     WHERE ml.id = $1 AND ml.is_deleted = FALSE`,
+    [id]
+  );
 
-    const result = await db.query(query, [id]);
-
-    if (result.rows.length === 0) {
-      throw new NotFound("Mailing list not found or already deleted");
-    }
-
-    return true;
-  } catch (error) {
-    logger.error(`Error deleting mailing list ${id}:`, error);
-    throw error;
+  if (mailingListResult.rows.length === 0) {
+    throw new NotFound("Mailing list not found");
   }
-};
 
-/**
- * Get a mailing list by ID
- * @async
- * @function getMailingListById
- * @memberof module:services/mailing-list
- * @param {number} id - Mailing list ID
- * @returns {Promise<Object>} Mailing list data
- */
-const getMailingListById = async (id) => {
-  try {
-    const query = `
-      SELECT *
-      FROM mailing_lists
-      WHERE id = $1 AND is_deleted = false
-    `;
+  const mailingList = mailingListResult.rows[0];
 
-    const result = await db.query(query, [id]);
+  // Get recipient count
+  const countResult = await db.query(
+    `SELECT COUNT(*) as count
+     FROM mailing_list_recipients
+     WHERE mailing_list_id = $1`,
+    [id]
+  );
 
-    if (result.rows.length === 0) {
-      throw new NotFound("Mailing list not found");
-    }
-
-    const mailingList = transformMailingListFromDb(result.rows[0]);
-
-    // Get recipient count
-    mailingList.recipientCount = await getRecipientCount(id);
-
-    return mailingList;
-  } catch (error) {
-    logger.error(`Error getting mailing list ${id}:`, error);
-    throw error;
-  }
-};
+  // Return combined result
+  return {
+    ...mailingList,
+    recipientCount: parseInt(countResult.rows[0].count),
+  };
+}
 
 /**
  * List mailing lists with pagination and filtering
- * @async
- * @function listMailingLists
- * @memberof module:services/mailing-list
- * @param {Object} options - Filter and pagination options
- * @returns {Promise<Object>} Paginated mailing list results
+ * @param {Object} queryParams - Query parameters for pagination and filtering
+ * @returns {Promise<Object>} - Paginated list of mailing lists
  */
-const listMailingLists = async (options = {}) => {
-  const { page = 1, limit = 10, search, isActive } = options;
-
+async function listMailingLists(queryParams) {
+  // Set default query params
+  const page = Number(queryParams.page) || 1;
+  const limit = Number(queryParams.limit) || 10;
   const offset = (page - 1) * limit;
+  const sortBy = queryParams.sortBy || "created_at";
+  const sortOrder = queryParams.sortOrder || "desc";
+
   const params = [];
-  let paramCount = 1;
+  let paramIndex = 1;
 
-  // Build WHERE conditions
-  let whereConditions = ["is_deleted = false"];
-
-  if (search) {
-    whereConditions.push(`(name ILIKE $${paramCount} OR description ILIKE $${paramCount})`);
-    params.push(`%${search}%`);
-    paramCount++;
-  }
-
-  if (isActive !== undefined) {
-    whereConditions.push(`is_active = $${paramCount++}`);
-    params.push(isActive);
-  }
-
-  const whereClause = whereConditions.length ? "WHERE " + whereConditions.join(" AND ") : "";
-
-  // Count query for pagination
-  const countQuery = `
-    SELECT COUNT(*) as total
-    FROM mailing_lists
-    ${whereClause}
+  // Build query with optional filters
+  let query = `
+    SELECT ml.*, u.email as created_by_email,
+           (SELECT COUNT(*) FROM mailing_list_recipients mlr WHERE mlr.mailing_list_id = ml.id) as recipient_count
+    FROM mailing_lists ml
+    LEFT JOIN users u ON ml.created_by = u.id
+    WHERE ml.is_deleted = FALSE
   `;
 
-  // Data query with pagination
-  const dataQuery = `
-    SELECT *
-    FROM mailing_lists
-    ${whereClause}
-    ORDER BY updated_at DESC
-    LIMIT $${paramCount++} OFFSET $${paramCount++}
-  `;
+  // Add search filter if provided
+  if (queryParams.search) {
+    query += ` AND (ml.name ILIKE $${paramIndex} OR ml.description ILIKE $${paramIndex})`;
+    params.push(`%${queryParams.search}%`);
+    paramIndex++;
+  }
 
+  // Add active status filter if specified
+  if (queryParams.isActive !== undefined) {
+    query += ` AND ml.is_active = $${paramIndex}`;
+    params.push(queryParams.isActive);
+    paramIndex++;
+  }
+
+  // Add pagination and sorting
+  const validSortColumns = ["id", "name", "created_at", "updated_at"];
+  const validSortOrders = ["asc", "desc"];
+
+  const actualSortBy = validSortColumns.includes(sortBy) ? sortBy : "created_at";
+  const actualSortOrder = validSortOrders.includes(sortOrder.toLowerCase()) ? sortOrder : "desc";
+
+  query += ` ORDER BY ml.${actualSortBy} ${actualSortOrder}
+             LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
   params.push(limit, offset);
 
-  try {
-    const countResult = await db.query(countQuery, params.slice(0, paramCount - 3));
-    const dataResult = await db.query(dataQuery, params);
+  // Execute the main query
+  const result = await db.query(query, params);
 
-    const total = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(total / limit);
+  // Get total count for pagination
+  const countResult = await db.query(
+    `SELECT COUNT(*) 
+     FROM mailing_lists 
+     WHERE is_deleted = FALSE
+     ${queryParams.search ? ` AND (name ILIKE $1 OR description ILIKE $1)` : ""}
+     ${queryParams.isActive !== undefined ? ` AND is_active = $${queryParams.search ? 2 : 1}` : ""}`,
+    params.slice(0, paramIndex - 1)
+  );
 
-    // Transform and augment with recipient counts
-    const mailingLists = [];
-    for (const list of dataResult.rows) {
-      const transformedList = transformMailingListFromDb(list);
-      transformedList.recipientCount = await getRecipientCount(list.id);
-      mailingLists.push(transformedList);
-    }
+  const totalCount = parseInt(countResult.rows[0].count);
+  const totalPages = Math.ceil(totalCount / limit);
 
-    return {
-      data: mailingLists,
-      pagination: {
-        total,
-        totalPages,
-        currentPage: page,
-        limit,
-      },
-    };
-  } catch (error) {
-    logger.error("Error listing mailing lists:", error);
-    throw error;
-  }
-};
+  return {
+    data: result.rows,
+    pagination: {
+      page,
+      limit,
+      totalItems: totalCount,
+      totalPages,
+    },
+  };
+}
 
 /**
- * Get the count of recipients in a mailing list
- * @async
- * @function getRecipientCount
- * @memberof module:services/mailing-list
- * @param {number} mailingListId - Mailing list ID
- * @returns {Promise<number>} Count of recipients
+ * Update an existing mailing list
+ * @param {number} id - Mailing list ID
+ * @param {Object} updateData - Data to update
+ * @param {UUID} userId - ID of the user updating the mailing list
+ * @returns {Promise<Object>} - Updated mailing list
  */
-const getRecipientCount = async (mailingListId) => {
+async function updateMailingList(id, updateData, userId) {
+  const client = await db.getClient();
+
   try {
-    const query = `
-      SELECT COUNT(*) as count
-      FROM mailing_list_recipients
-      WHERE mailing_list_id = $1
+    await client.query("BEGIN");
+
+    // Check if mailing list exists
+    const existingResult = await client.query("SELECT id FROM mailing_lists WHERE id = $1 AND is_deleted = FALSE", [id]);
+
+    if (existingResult.rows.length === 0) {
+      throw new NotFound("Mailing list not found");
+    }
+
+    // Prepare update query
+    const updates = [];
+    const params = [id, userId]; // id = $1, userId = $2
+    let paramIndex = 3;
+
+    if (updateData.name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      params.push(updateData.name);
+    }
+
+    if (updateData.description !== undefined) {
+      updates.push(`description = $${paramIndex++}`);
+      params.push(updateData.description);
+    }
+
+    if (updateData.filterCriteria !== undefined) {
+      updates.push(`filter_criteria = $${paramIndex++}`);
+      params.push(JSON.stringify(updateData.filterCriteria));
+    }
+
+    if (updateData.is_active !== undefined) {
+      updates.push(`is_active = $${paramIndex++}`);
+      params.push(updateData.is_active);
+    }
+
+    updates.push("updated_by = $2"); // userId is already $2
+    updates.push("updated_at = NOW()");
+
+    // Update the mailing list
+    const updateQuery = `
+      UPDATE mailing_lists
+      SET ${updates.join(", ")}
+      WHERE id = $1
+      RETURNING id, name, description, source_type, filter_criteria, is_active, created_at, updated_at
     `;
 
-    const result = await db.query(query, [mailingListId]);
-    return parseInt(result.rows[0].count);
+    const updateResult = await client.query(updateQuery, params);
+    const updatedMailingList = updateResult.rows[0];
+
+    // If filter criteria is updated, we need to update recipients
+    if (updateData.filterCriteria) {
+      // Delete all existing recipients
+      await client.query("DELETE FROM mailing_list_recipients WHERE mailing_list_id = $1", [id]);
+
+      // Build query to find subscribers matching new filter criteria
+      const { query, params: filterParams } = buildFilterQuery(updateData.filterCriteria);
+
+      // Get subscribers that match the new filter criteria
+      const subscribersResult = await client.query(query, filterParams);
+      const subscribers = subscribersResult.rows;
+
+      // Insert new recipients
+      if (subscribers.length > 0) {
+        const insertPromises = subscribers.map((subscriber) =>
+          client.query(
+            `INSERT INTO mailing_list_recipients 
+            (mailing_list_id, recipient_type, recipient_id)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (mailing_list_id, recipient_type, recipient_id) DO NOTHING`,
+            [id, "subscriber", subscriber.id]
+          )
+        );
+
+        await Promise.all(insertPromises);
+      }
+
+      // Get the updated recipient count
+      const countResult = await client.query("SELECT COUNT(*) as count FROM mailing_list_recipients WHERE mailing_list_id = $1", [id]);
+
+      updatedMailingList.recipientCount = parseInt(countResult.rows[0].count);
+    } else {
+      // Just get the current recipient count
+      const countResult = await client.query("SELECT COUNT(*) as count FROM mailing_list_recipients WHERE mailing_list_id = $1", [id]);
+
+      updatedMailingList.recipientCount = parseInt(countResult.rows[0].count);
+    }
+
+    await client.query("COMMIT");
+    return updatedMailingList;
   } catch (error) {
-    logger.error(`Error getting recipient count for mailing list ${mailingListId}:`, error);
-    return 0; // Return 0 on error instead of failing
+    await client.query("ROLLBACK");
+    logger.error("Error updating mailing list:", error);
+
+    if (error.code === "23505") {
+      throw new ConfictResource("A mailing list with this name already exists");
+    }
+
+    throw error;
+  } finally {
+    client.release();
   }
-};
+}
+
+/**
+ * Delete a mailing list (soft delete)
+ * @param {number} id - Mailing list ID
+ * @param {UUID} userId - ID of the user deleting the mailing list
+ * @returns {Promise<boolean>} - True if successfully deleted
+ */
+async function deleteMailingList(id, userId) {
+  // Check if mailing list exists
+  const existingResult = await db.query("SELECT id FROM mailing_lists WHERE id = $1 AND is_deleted = FALSE", [id]);
+
+  if (existingResult.rows.length === 0) {
+    throw new NotFound("Mailing list not found");
+  }
+
+  // Soft delete the mailing list
+  await db.query(
+    `UPDATE mailing_lists 
+     SET is_deleted = TRUE, 
+         updated_by = $2, 
+         updated_at = NOW()
+     WHERE id = $1`,
+    [id, userId]
+  );
+
+  return true;
+}
 
 /**
  * Get recipients of a mailing list with pagination
- * @async
- * @function getMailingListRecipients
- * @memberof module:services/mailing-list
- * @param {number} mailingListId - Mailing list ID
- * @param {Object} options - Pagination options
- * @returns {Promise<Object>} Paginated recipients
+ * @param {number} id - Mailing list ID
+ * @param {Object} queryParams - Query parameters for pagination
+ * @returns {Promise<Object>} - Paginated list of recipients
  */
-const getMailingListRecipients = async (mailingListId, options = {}) => {
-  const { page = 1, limit = 100 } = options;
+async function getMailingListRecipients(id, queryParams) {
+  // Check if mailing list exists
+  const mailingListResult = await db.query("SELECT id, name FROM mailing_lists WHERE id = $1 AND is_deleted = FALSE", [id]);
+
+  if (mailingListResult.rows.length === 0) {
+    throw new NotFound("Mailing list not found");
+  }
+
+  // Set default query params
+  const page = Number(queryParams.page) || 1;
+  const limit = Number(queryParams.limit) || 10;
   const offset = (page - 1) * limit;
 
-  try {
-    // First check if the mailing list exists
-    await getMailingListById(mailingListId);
+  // Create the SQL query for getting recipients
+  const recipientsQuery = `
+    SELECT s.*, mlr.recipient_type
+    FROM mailing_list_recipients mlr
+    JOIN subscribers s ON mlr.recipient_id = s.id AND mlr.recipient_type = 'subscriber'
+    WHERE mlr.mailing_list_id = $1
+    ORDER BY s.email
+    LIMIT $2 OFFSET $3`;
 
-    // Count query
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM mailing_list_recipients
-      WHERE mailing_list_id = $1
-    `;
+  // Log the query with parameter values for debugging purposes
+  logger.info(`[MAILING-LIST-RECIPIENTS][ID:${id}] SQL: ${recipientsQuery.replace(/\s+/g, " ")} PARAMS: [${id}, ${limit}, ${offset}]`);
 
-    // Query for recipients with pagination
-    const recipientsQuery = `
-      SELECT r.*, 
-             CASE 
-                WHEN r.recipient_type = 'subscriber' THEN 
-                  (SELECT row_to_json(s) FROM (SELECT * FROM subscribers WHERE id = r.recipient_id) s)
-                WHEN r.recipient_type = 'user' THEN 
-                  (SELECT row_to_json(u) FROM (SELECT id, email, full_name FROM users WHERE id = r.recipient_id) u)
-                ELSE NULL
-             END as recipient_data
-      FROM mailing_list_recipients r
-      WHERE r.mailing_list_id = $1
-      ORDER BY r.created_at DESC
-      LIMIT $2 OFFSET $3
-    `;
+  // Get recipients with pagination
+  const recipientsResult = await db.query(recipientsQuery, [id, limit, offset]);
 
-    const [countResult, recipientsResult] = await Promise.all([
-      db.query(countQuery, [mailingListId]),
-      db.query(recipientsQuery, [mailingListId, limit, offset]),
-    ]);
+  // Create the count query
+  const countQuery = `
+    SELECT COUNT(*) 
+    FROM mailing_list_recipients
+    WHERE mailing_list_id = $1`;
 
-    const total = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(total / limit);
+  // Log the count query as well
+  logger.info(`[MAILING-LIST-RECIPIENTS-COUNT][ID:${id}] SQL: ${countQuery.replace(/\s+/g, " ")} PARAMS: [${id}]`);
 
-    // Transform recipients data
-    const recipients = recipientsResult.rows.map((row) => {
-      return {
-        id: row.id,
-        recipientType: row.recipient_type,
-        recipientId: row.recipient_id,
-        recipientData: row.recipient_data,
-        createdAt: row.created_at,
-      };
-    });
+  // Get total count for pagination
+  const countResult = await db.query(countQuery, [id]);
 
-    return {
-      data: recipients,
-      pagination: {
-        total,
-        totalPages,
-        currentPage: page,
-        limit,
-      },
-    };
-  } catch (error) {
-    logger.error(`Error getting recipients for mailing list ${mailingListId}:`, error);
-    throw error;
-  }
-};
-
-/**
- * Get variables available for a mailing list
- * @async
- * @function getMailingListVariables
- * @memberof module:services/mailing-list
- * @param {number} mailingListId - Mailing list ID
- * @returns {Promise<Array>} List of available variables for email templates
- * @example
- * // Example of returned variables
- * [
- *   { name: "email", description: "Recipient's email address", example: "user@example.com" },
- *   { name: "name", description: "Recipient's name", example: "John Doe" },
- *   { name: "date_of_birth", description: "Recipient's date of birth", example: "1990-01-01" }
- * ]
- */
-const getMailingListVariables = async (mailingListId) => {
-  try {
-    // First check if the mailing list exists
-    const mailingList = await getMailingListById(mailingListId);
-
-    // Define base variables available for all mailing lists
-    const baseVariables = [
-      { name: "email", description: "Recipient's email address", example: "user@example.com" },
-      { name: "name", description: "Recipient's name", example: "John Doe" },
-    ];
-
-    let additionalVariables = [];
-
-    // Add date_of_birth if subscribers are included
-    if (mailingList.sourceType === "subscribers" || mailingList.sourceType === "mixed") {
-      additionalVariables.push({
-        name: "date_of_birth",
-        description: "Recipient's date of birth",
-        example: "1990-01-01",
-      });
-
-      // Add metadata fields if available in any subscriber
-      // Get sample subscriber to extract metadata schema
-      const sampleQuery = `
-        SELECT s.metadata
-        FROM subscribers s
-        JOIN mailing_list_recipients mlr ON s.id = mlr.recipient_id AND mlr.recipient_type = 'subscriber'
-        WHERE mlr.mailing_list_id = $1 AND s.metadata IS NOT NULL
-        LIMIT 1
-      `;
-
-      const sampleResult = await db.query(sampleQuery, [mailingListId]);
-
-      if (sampleResult.rows.length > 0 && sampleResult.rows[0].metadata) {
-        const metadata = sampleResult.rows[0].metadata;
-
-        Object.keys(metadata).forEach((key) => {
-          additionalVariables.push({
-            name: `metadata.${key}`,
-            description: `Custom field: ${key}`,
-            example: typeof metadata[key] === "string" ? metadata[key] : JSON.stringify(metadata[key]),
-          });
-        });
-      }
-    }
-
-    // Add user-specific variables if users are included
-    if (mailingList.sourceType === "users" || mailingList.sourceType === "mixed") {
-      additionalVariables = [
-        ...additionalVariables,
-        { name: "full_name", description: "User's full name", example: "John Doe" },
-        // Add other user fields as needed
-      ];
-    }
-
-    return [...baseVariables, ...additionalVariables];
-  } catch (error) {
-    logger.error(`Error getting variables for mailing list ${mailingListId}:`, error);
-    throw error;
-  }
-};
-
-/**
- * Transform a mailing list database row to API format
- * @function transformMailingListFromDb
- * @memberof module:services/mailing-list
- * @param {Object} dbMailingList - Mailing list row from database
- * @returns {Object} Transformed mailing list object
- */
-const transformMailingListFromDb = (dbMailingList) => {
-  if (!dbMailingList) return null;
+  const totalCount = parseInt(countResult.rows[0].count);
+  const totalPages = Math.ceil(totalCount / limit);
 
   return {
-    id: dbMailingList.id,
-    name: dbMailingList.name,
-    description: dbMailingList.description,
-    sourceType: dbMailingList.source_type,
-    filterCriteria: dbMailingList.filter_criteria
-      ? typeof dbMailingList.filter_criteria === "string"
-        ? JSON.parse(dbMailingList.filter_criteria)
-        : dbMailingList.filter_criteria
-      : null,
-    tagFilter: dbMailingList.tag_filter
-      ? typeof dbMailingList.tag_filter === "string"
-        ? JSON.parse(dbMailingList.tag_filter)
-        : dbMailingList.tag_filter
-      : null,
-    isActive: dbMailingList.is_active,
-    createdBy: dbMailingList.created_by,
-    updatedBy: dbMailingList.updated_by,
-    createdAt: dbMailingList.created_at,
-    updatedAt: dbMailingList.updated_at,
+    mailingList: mailingListResult.rows[0],
+    data: recipientsResult.rows,
+    pagination: {
+      page,
+      limit,
+      totalItems: totalCount,
+      totalPages,
+    },
   };
-};
+}
+
+/**
+ * Regenerate recipients for a mailing list based on current filter criteria
+ * @param {number} id - Mailing list ID
+ * @returns {Promise<Object>} - Updated mailing list with recipient count
+ */
+async function regenerateRecipients(id) {
+  const client = await db.getClient();
+
+  try {
+    await client.query("BEGIN");
+
+    // Check if mailing list exists and get filter criteria
+    const mailingListResult = await client.query("SELECT id, filter_criteria FROM mailing_lists WHERE id = $1 AND is_deleted = FALSE", [
+      id,
+    ]);
+
+    if (mailingListResult.rows.length === 0) {
+      throw new NotFound("Mailing list not found");
+    }
+
+    const mailingList = mailingListResult.rows[0];
+    const filterCriteria = mailingList.filter_criteria;
+
+    // Delete all existing recipients
+    await client.query("DELETE FROM mailing_list_recipients WHERE mailing_list_id = $1", [id]);
+
+    // Build query to find subscribers matching filter criteria
+    const { query, params } = buildFilterQuery(filterCriteria);
+
+    // Get subscribers that match the filter criteria
+    const subscribersResult = await client.query(query, params);
+    const subscribers = subscribersResult.rows;
+
+    // Insert new recipients
+    if (subscribers.length > 0) {
+      const insertPromises = subscribers.map((subscriber) =>
+        client.query(
+          `INSERT INTO mailing_list_recipients 
+          (mailing_list_id, recipient_type, recipient_id)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (mailing_list_id, recipient_type, recipient_id) DO NOTHING`,
+          [id, "subscriber", subscriber.id]
+        )
+      );
+
+      await Promise.all(insertPromises);
+    }
+
+    // Get updated information
+    const updatedResult = await client.query(
+      `SELECT ml.*, 
+        (SELECT COUNT(*) FROM mailing_list_recipients WHERE mailing_list_id = ml.id) as recipient_count
+      FROM mailing_lists ml
+      WHERE ml.id = $1`,
+      [id]
+    );
+
+    await client.query("COMMIT");
+
+    return updatedResult.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK");
+    logger.error("Error regenerating recipients:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 module.exports = {
   createMailingList,
-  updateMailingList,
-  deleteMailingList,
   getMailingListById,
   listMailingLists,
+  updateMailingList,
+  deleteMailingList,
   getMailingListRecipients,
-  getMailingListVariables,
+  regenerateRecipients,
 };

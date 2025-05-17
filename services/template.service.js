@@ -1,508 +1,590 @@
 /**
- * @module services/template
- * @description Service for managing email templates
- * @category Services
- * @subcategory Template
+ * @module services/email-template.service
+ * @description Service for managing email templates with MJML processing and S3 storage
  */
-const mjml2html = require("mjml");
-const { v4: uuidv4 } = require("uuid");
-const db = require("../config/db");
-const config = require("../config");
-const logger = require("./logger.service");
-const { NotFound } = require("../utils/errors");
-const s3Service = require("./s3.service");
 
-const TEMPLATE_FOLDER = "templates";
-const IMAGE_FOLDER = "images";
+const mjml = require("mjml");
+const db = require("../config/db");
+const s3Service = require("./s3.service");
+const logger = require("./logger.service");
+const NotFound = require("../utils/errors/NotFound");
+const ConflictResourceError = require("../utils/errors/ConfictResource");
+const subscriberService = require("./subscriber.service");
+
+// S3 directory for storing email templates
+const TEMPLATES_S3_PREFIX = "email-templates/";
 
 /**
- * Extract template variables from MJML content
- * @function extractTemplateVariables
- * @memberof module:services/template
- * @param {string} mjmlContent - The MJML content
- * @returns {Array} - Array of variable names
+ * Extract variables from template content using regex
+ * Supports formats like {{ variable }} or {{ variable || "default" }}
+ * @param {string} content - Template content
+ * @returns {Array<string>} - Array of found variable names
  */
-const extractTemplateVariables = (mjmlContent) => {
-  const regex = /\{\{\s*([\w\.]+)\s*\}\}/g;
-  const variables = [];
+function extractVariables(content) {
+  // Regex to match {{ variable }} or {{ variable || "default" }} patterns
+  const variableRegex = /\{\{\s*([a-zA-Z0-9_.]+)(?:\s*\|\|\s*["'](?:[^"']*)["'])?\s*\}\}/g;
+  const variables = new Set();
   let match;
 
-  while ((match = regex.exec(mjmlContent)) !== null) {
-    variables.push(match[1]);
+  while ((match = variableRegex.exec(content)) !== null) {
+    variables.add(match[1]);
   }
 
-  return [...new Set(variables)]; // Return unique variables
-};
+  return Array.from(variables);
+}
 
 /**
- * Process MJML template and return HTML
- * @function processMjmlToHtml
- * @memberof module:services/template
- * @param {string} mjmlContent - The MJML template content
- * @returns {Object} - Object containing HTML output and errors if any
- */
-const processMjmlToHtml = (mjmlContent) => {
-  try {
-    const result = mjml2html(mjmlContent, {
-      validationLevel: "strict",
-      filePath: __dirname,
-    });
-
-    return {
-      html: result.html,
-      errors: result.errors,
-    };
-  } catch (error) {
-    logger.error("Error processing MJML to HTML:", error);
-    throw new Error(`Error processing MJML: ${error.message}`);
-  }
-};
-
-/**
- * Replace template variables with actual values
- * @function processTemplateVariables
- * @memberof module:services/template
- * @param {string} template - The template content (HTML or MJML)
- * @param {Object} variables - Object containing variable values
- * @returns {string} - The processed template
- */
-const processTemplateVariables = (template, variables) => {
-  let processed = template;
-
-  Object.entries(variables).forEach(([key, value]) => {
-    const regex = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g");
-    processed = processed.replace(regex, value || "");
-  });
-
-  return processed;
-};
-
-/**
- * Create a new email template
- * @function createTemplate
- * @memberof module:services/template
+ * Create a new email template with MJML content
+ * @async
+ * @function createEmailTemplate
  * @param {Object} templateData - Template data
- * @param {string} userId - ID of the user creating the template
- * @returns {Promise<Object>} - Created template
+ * @param {string} templateData.name - Template name
+ * @param {string} templateData.subject - Email subject
+ * @param {string} templateData.mjmlContent - MJML content
+ * @param {string} [templateData.description] - Template description
+ * @param {string} [templateData.category] - Template category
+ * @param {boolean} [templateData.hasAttachments] - Whether template has attachments
+ * @param {Object} [templateData.metadata] - Additional metadata
+ * @returns {Promise<Object>} Created template object
+ * @throws {ConflictResourceError} If a template with the same name already exists
  */
-const createTemplate = async (templateData, userId) => {
-  const { name, description, category, mjmlSource } = templateData;
-  let templateVariables = templateData.templateVariables;
+async function createEmailTemplate(templateData) {
+  const { name, subject, mjmlContent, description, category, hasAttachments, metadata } = templateData;
 
-  // Extract variables if not provided
-  if (!templateVariables || templateVariables.length === 0) {
-    templateVariables = extractTemplateVariables(mjmlSource);
+  // Check if template with same name exists
+  const existingTemplate = await db.query("SELECT id FROM email_templates WHERE name = $1 AND is_deleted = FALSE", [name]);
+  if (existingTemplate.rows.length > 0) {
+    throw new ConflictResourceError(`Email template with name '${name}' already exists`);
   }
-
-  // Process MJML to HTML
-  const { html, errors } = processMjmlToHtml(mjmlSource);
-
-  if (errors && errors.length > 0) {
-    logger.warn("MJML processing had errors:", errors);
-  }
-
-  // Generate unique folder name for this template
-  const templateId = uuidv4();
-  const templateFolder = `${TEMPLATE_FOLDER}/template-${templateId}`;
-
-  // Create file objects for S3 upload with the specified file names
-  const mjmlFile = {
-    buffer: Buffer.from(mjmlSource),
-    mimetype: "text/plain",
-    originalname: "src.mjml",
-    size: Buffer.byteLength(mjmlSource),
-  };
-
-  const htmlFile = {
-    buffer: Buffer.from(html),
-    mimetype: "text/html",
-    originalname: "output.html",
-    size: Buffer.byteLength(html),
-  };
-
-  // Upload MJML and HTML to S3 using s3Service
-  const mjmlUploadResult = await s3Service.uploadFile(mjmlFile, templateFolder);
-  const htmlUploadResult = await s3Service.uploadFile(htmlFile, templateFolder);
-
-  const mjmlKey = mjmlUploadResult.key;
-  const htmlKey = htmlUploadResult.key;
-
-  // Save to database
-  const query = `
-    INSERT INTO email_templates (
-      name, description, category, mjml_s3_key, html_s3_key, 
-      template_variables, s3_assets_path, created_by, updated_by
-    ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $8
-    ) RETURNING *
-  `;
-
-  const values = [name, description || null, category || null, mjmlKey, htmlKey, JSON.stringify(templateVariables), templateFolder, userId];
 
   try {
+    // Convert MJML to HTML
+    const { html, errors } = mjml(mjmlContent);
+
+    if (errors && errors.length > 0) {
+      logger.error("MJML processing errors:", errors);
+      throw new Error("Invalid MJML content: " + errors.map((e) => e.message).join(", "));
+    }
+
+    // Extract variable names from the template
+    const extractedVariables = extractVariables(mjmlContent);
+
+    // Create unique keys for S3
+    const timestamp = Date.now();
+    const s3AssetsPath = `${TEMPLATES_S3_PREFIX}${timestamp}/${name.replace(/\s+/g, "-").toLowerCase()}/`;
+    const mjmlKey = `${s3AssetsPath}template.mjml`;
+    const htmlKey = `${s3AssetsPath}template.html`;
+
+    // Upload both MJML and HTML to S3
+    await s3Service.uploadFile(mjmlKey, mjmlContent, { contentType: "text/plain" });
+    await s3Service.uploadFile(htmlKey, html, { contentType: "text/html" });
+
+    // Get user ID from request (if available)
+    const userId = templateData.userId; // This should be passed from the controller
+
+    // Store template in database
+    const query = `
+      INSERT INTO email_templates (
+        name, subject, description, category, s3_assets_path, mjml_s3_key, html_s3_key, 
+        has_attachments, template_variables, metadata, created_by, is_active, is_deleted
+      ) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *
+    `;
+
+    const values = [
+      name,
+      subject,
+      description || null,
+      category || "General",
+      s3AssetsPath,
+      mjmlKey,
+      htmlKey,
+      hasAttachments || false,
+      JSON.stringify(extractedVariables),
+      metadata || null,
+      userId || null,
+      true, // is_active default true
+      false, // is_deleted default false
+    ];
+
     const result = await db.query(query, values);
-    return transformTemplateFromDb(result.rows[0]);
+    return result.rows[0];
   } catch (error) {
-    logger.error("Error creating template:", error);
+    // Clean up S3 files if database insertion fails
+    logger.error("Error creating email template:", error);
     throw error;
   }
-};
+}
 
 /**
  * Update an existing email template
- * @function updateTemplate
- * @memberof module:services/template
+ * @async
+ * @function updateEmailTemplate
  * @param {number} id - Template ID
- * @param {Object} templateData - Updated template data
- * @param {string} userId - ID of the user updating the template
- * @returns {Promise<Object>} - Updated template
+ * @param {Object} templateData - Template data to update
+ * @returns {Promise<Object>} Updated template object
+ * @throws {NotFound} If template doesn't exist
  */
-const updateTemplate = async (id, templateData, userId) => {
-  // Get existing template
-  const existingTemplate = await getTemplateById(id);
-  if (!existingTemplate) {
-    throw new NotFound("Template not found");
+async function updateEmailTemplate(id, templateData) {
+  // Check if template exists
+  const templateCheck = await db.query("SELECT * FROM email_templates WHERE id = $1 AND is_deleted = FALSE", [id]);
+  if (templateCheck.rows.length === 0) {
+    throw new NotFound(`Email template with ID ${id} not found`);
   }
 
-  let updateFields = [];
-  let values = [];
-  let paramCount = 1;
+  const existingTemplate = templateCheck.rows[0];
+  const updateFields = [];
+  const values = [id]; // First parameter is the ID
+  let paramIndex = 2;
 
-  // Process all possible update fields
-  if (templateData.name !== undefined) {
-    updateFields.push(`name = $${paramCount++}`);
-    values.push(templateData.name);
+  // Build dynamic update query based on provided fields
+  Object.keys(templateData).forEach((key) => {
+    if (templateData[key] !== undefined && key !== "userId") {
+      let dbField = key.replace(/([A-Z])/g, "_$1").toLowerCase(); // Convert camelCase to snake_case
+
+      // Special handling for MJML content
+      if (key === "mjmlContent") {
+        dbField = "mjml_s3_key";
+
+        // We'll update the S3 content later, for now just mark for update
+        updateFields.push(`${dbField} = $${paramIndex++}`);
+        values.push(existingTemplate.mjml_s3_key); // Use existing key, we'll update content later
+
+        // Also mark HTML key for update
+        updateFields.push(`html_s3_key = $${paramIndex++}`);
+        values.push(existingTemplate.html_s3_key); // Use existing key
+
+        // Extract and update variables
+        const extractedVariables = extractVariables(templateData.mjmlContent);
+        updateFields.push(`template_variables = $${paramIndex++}`);
+        values.push(JSON.stringify(extractedVariables));
+      } else {
+        updateFields.push(`${dbField} = $${paramIndex++}`);
+        values.push(templateData[key]);
+      }
+    }
+  });
+
+  // Add updated_by if userId is provided
+  if (templateData.userId) {
+    updateFields.push(`updated_by = $${paramIndex++}`);
+    values.push(templateData.userId);
   }
 
-  if (templateData.description !== undefined) {
-    updateFields.push(`description = $${paramCount++}`);
-    values.push(templateData.description);
+  if (updateFields.length === 0) {
+    return existingTemplate; // Nothing to update
   }
 
-  if (templateData.category !== undefined) {
-    updateFields.push(`category = $${paramCount++}`);
-    values.push(templateData.category);
-  }
-
-  if (templateData.isActive !== undefined) {
-    updateFields.push(`is_active = $${paramCount++}`);
-    values.push(templateData.isActive);
-  }
-
-  // If MJML source is provided, reprocess and update S3 files
-  if (templateData.mjmlSource) {
-    const mjmlSource = templateData.mjmlSource;
-    const { html } = processMjmlToHtml(mjmlSource);
-
-    // Extract variables if not provided
-    const templateVariables = templateData.templateVariables || extractTemplateVariables(mjmlSource);
-
-    // Create file objects for S3 update with the specified file names
-    const mjmlFile = {
-      buffer: Buffer.from(mjmlSource),
-      mimetype: "text/plain",
-      originalname: "src.mjml", // Use the standardized naming convention
-      size: Buffer.byteLength(mjmlSource),
-    };
-
-    const htmlFile = {
-      buffer: Buffer.from(html),
-      mimetype: "text/html",
-      originalname: "output.html", // Use the standardized naming convention
-      size: Buffer.byteLength(html),
-    };
-
-    // Update MJML and HTML in S3 using s3Service
-    await s3Service.updateFile(existingTemplate.mjmlS3Key, mjmlFile);
-    await s3Service.updateFile(existingTemplate.htmlS3Key, htmlFile);
-
-    // Update template_variables in database
-    updateFields.push(`template_variables = $${paramCount++}`);
-    values.push(JSON.stringify(templateVariables));
-  } else if (templateData.templateVariables) {
-    updateFields.push(`template_variables = $${paramCount++}`);
-    values.push(JSON.stringify(templateData.templateVariables));
-  }
-
-  // Add updated_by and updated_at
-  updateFields.push(`updated_by = $${paramCount++}`);
-  values.push(userId);
-
-  updateFields.push(`updated_at = NOW()`);
-
-  // Update the database
+  // Execute update query
   const query = `
     UPDATE email_templates 
-    SET ${updateFields.join(", ")} 
-    WHERE id = $${paramCount++} 
+    SET ${updateFields.join(", ")}, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $1 AND is_deleted = FALSE
     RETURNING *
   `;
 
-  values.push(id);
+  const result = await db.query(query, values);
 
-  try {
-    const result = await db.query(query, values);
-    if (result.rows.length === 0) {
-      throw new NotFound("Template not found");
+  // If MJML content was updated, process and upload new versions
+  if (templateData.mjmlContent) {
+    // Convert MJML to HTML
+    const { html, errors } = mjml(templateData.mjmlContent);
+
+    if (errors && errors.length > 0) {
+      logger.error("MJML processing errors:", errors);
+      throw new Error("Invalid MJML content: " + errors.map((e) => e.message).join(", "));
     }
-    return transformTemplateFromDb(result.rows[0]);
-  } catch (error) {
-    logger.error(`Error updating template ${id}:`, error);
-    throw error;
+
+    // Upload both MJML and HTML to S3 (overwriting existing files)
+    await s3Service.uploadFile(existingTemplate.mjml_s3_key, templateData.mjmlContent, { contentType: "text/plain" });
+    await s3Service.uploadFile(existingTemplate.html_s3_key, html, { contentType: "text/html" });
   }
-};
+
+  return result.rows[0];
+}
 
 /**
- * Delete a template (soft delete)
- * @function deleteTemplate
- * @memberof module:services/template
+ * Get an email template by ID
+ * @async
+ * @function getEmailTemplateById
  * @param {number} id - Template ID
- * @returns {Promise<boolean>} - Success status
+ * @param {boolean} [includeContent=false] - Whether to include MJML and HTML content
+ * @returns {Promise<Object>} Template object
+ * @throws {NotFound} If template doesn't exist
  */
-const deleteTemplate = async (id) => {
+async function getEmailTemplateById(id, includeContent = false) {
+  const template = await db.query("SELECT * FROM email_templates WHERE id = $1 AND is_deleted = FALSE", [id]);
+
+  if (template.rows.length === 0) {
+    throw new NotFound(`Email template with ID ${id} not found`);
+  }
+
+  const templateData = template.rows[0];
+
+  // If requested, fetch content from S3
+  if (includeContent) {
+    try {
+      // Get MJML content
+      templateData.mjmlContent = await s3Service.getFileContent(templateData.mjml_s3_key);
+
+      // Get HTML content
+      templateData.htmlContent = await s3Service.getFileContent(templateData.html_s3_key);
+    } catch (error) {
+      logger.error(`Error fetching S3 content for template ${id}:`, error);
+      // Continue with the template data we have, but without content
+    }
+  }
+
+  return templateData;
+}
+
+/**
+ * Delete an email template
+ * @async
+ * @function deleteEmailTemplate
+ * @param {number} id - Template ID
+ * @param {string} [userId] - User ID performing the delete
+ * @returns {Promise<boolean>} True if deleted, false if not found
+ */
+async function deleteEmailTemplate(id, userId = null) {
+  // First get the template to find S3 keys
+  const template = await db.query("SELECT * FROM email_templates WHERE id = $1 AND is_deleted = FALSE", [id]);
+
+  if (template.rows.length === 0) {
+    return false;
+  }
+
+  // Soft delete the template rather than actually deleting it
   const query = `
     UPDATE email_templates 
-    SET is_deleted = true, updated_at = NOW() 
-    WHERE id = $1 AND is_deleted = false 
-    RETURNING id
+    SET is_deleted = TRUE, 
+        updated_at = CURRENT_TIMESTAMP,
+        updated_by = $2
+    WHERE id = $1
+    RETURNING *
   `;
 
-  try {
-    const result = await db.query(query, [id]);
-    if (result.rows.length === 0) {
-      throw new NotFound("Template not found or already deleted");
-    }
-    return true;
-  } catch (error) {
-    logger.error(`Error deleting template ${id}:`, error);
-    throw error;
-  }
-};
+  await db.query(query, [id, userId]);
+
+  return true;
+}
 
 /**
- * Get template by ID
- * @function getTemplateById
- * @memberof module:services/template
- * @param {number} id - Template ID
- * @returns {Promise<Object>} - Template data
+ * List all email templates with pagination and filtering
+ * @async
+ * @function getAllEmailTemplates
+ * @param {number} [page=1] - Page number
+ * @param {number} [limit=20] - Items per page
+ * @param {Object} [filters={}] - Optional filters
+ * @returns {Promise<Object>} Object containing templates and pagination info
  */
-const getTemplateById = async (id) => {
-  const query = `
-    SELECT * FROM email_templates 
-    WHERE id = $1 AND is_deleted = false
-  `;
-
-  try {
-    const result = await db.query(query, [id]);
-    if (result.rows.length === 0) {
-      throw new NotFound("Template not found");
-    }
-    return transformTemplateFromDb(result.rows[0]);
-  } catch (error) {
-    logger.error(`Error getting template ${id}:`, error);
-    throw error;
-  }
-};
-
-/**
- * List templates with pagination and filtering
- * @function listTemplates
- * @memberof module:services/template
- * @param {Object} options - Filter and pagination options
- * @returns {Promise<Object>} - Paginated template list
- */
-const listTemplates = async (options = {}) => {
-  const { page = 1, limit = 10, category, search, isActive } = options;
-
+async function getAllEmailTemplates(page = 1, limit = 20, filters = {}) {
   const offset = (page - 1) * limit;
+  let query = "SELECT * FROM email_templates WHERE is_deleted = FALSE";
   const params = [];
-  let paramCount = 1;
+  let paramIndex = 1;
 
-  let whereConditions = ["is_deleted = false"];
-
-  if (category) {
-    whereConditions.push(`category = $${paramCount++}`);
-    params.push(category);
+  // Apply filters if provided
+  if (filters.isActive !== undefined) {
+    query += ` AND is_active = $${paramIndex++}`;
+    params.push(filters.isActive);
   }
 
-  if (search) {
-    whereConditions.push(`(name ILIKE $${paramCount} OR description ILIKE $${paramCount})`);
-    params.push(`%${search}%`);
-    paramCount++;
+  if (filters.category) {
+    query += ` AND category = $${paramIndex++}`;
+    params.push(filters.category);
   }
 
-  if (isActive !== undefined) {
-    whereConditions.push(`is_active = $${paramCount++}`);
-    params.push(isActive);
+  if (filters.search) {
+    query += ` AND (name ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`;
+    params.push(`%${filters.search}%`);
+    paramIndex++;
   }
 
-  const whereClause = whereConditions.length ? "WHERE " + whereConditions.join(" AND ") : "";
+  // Add count query for pagination
+  const countQuery = query.replace("SELECT *", "SELECT COUNT(*)");
 
-  // Count query for pagination
-  const countQuery = `
-    SELECT COUNT(*) as total
-    FROM email_templates
-    ${whereClause}
-  `;
-
-  // Data query with pagination
-  const dataQuery = `
-    SELECT *
-    FROM email_templates
-    ${whereClause}
-    ORDER BY created_at DESC
-    LIMIT $${paramCount++} OFFSET $${paramCount++}
-  `;
-
+  // Add pagination
+  query += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
   params.push(limit, offset);
 
   try {
-    const countResult = await db.query(countQuery, params.slice(0, paramCount - 3));
-    const dataResult = await db.query(dataQuery, params);
+    const { rows: countRows } = await db.query(countQuery, params.slice(0, -2));
+    const total = parseInt(countRows[0].count);
 
-    const total = parseInt(countResult.rows[0].total);
-    const totalPages = Math.ceil(total / limit);
+    const { rows } = await db.query(query, params);
 
     return {
-      data: dataResult.rows.map(transformTemplateFromDb),
+      templates: rows,
       pagination: {
         total,
-        totalPages,
-        currentPage: page,
+        page,
         limit,
+        totalPages: Math.ceil(total / limit),
       },
     };
   } catch (error) {
-    logger.error("Error listing templates:", error);
+    logger.error("Error getting email templates:", error);
     throw error;
   }
-};
+}
 
 /**
- * Upload a template image to S3
- * @function uploadTemplateImage
- * @memberof module:services/template
- * @param {Object} file - Uploaded file object from multer
- * @param {string} templateId - ID of the template to associate the image with
- * @param {string} userId - User ID of uploader
- * @returns {Promise<Object>} - Upload result with URL
+ * Render an email template with variable data
+ * @async
+ * @function renderEmailTemplate
+ * @param {number} templateId - Template ID
+ * @param {Object} [data={}] - Data for variable interpolation
+ * @param {number} [subscriberId] - Optional subscriber ID to get data
+ * @returns {Promise<Object>} Object with rendered subject and HTML content
+ * @throws {NotFound} If template doesn't exist
  */
-const uploadTemplateImage = async (file, templateId, userId) => {
-  if (!file) {
-    throw new Error("No file provided");
+async function renderEmailTemplate(templateId, data = {}, subscriberId) {
+  // Get template with content
+  const template = await getEmailTemplateById(templateId, true);
+
+  // Prepare the data context for variable interpolation
+  let context = { ...data };
+
+  // If subscriberId provided, merge subscriber data
+  if (subscriberId) {
+    try {
+      const subscriber = await subscriberService.getSubscriberById(subscriberId);
+
+      // Merge subscriber fields into context
+      if (subscriber) {
+        context = {
+          ...context,
+          ...subscriber,
+          metadata: subscriber.metadata || {},
+        };
+      }
+    } catch (error) {
+      logger.warn(`Error fetching subscriber ${subscriberId} for template rendering:`, error);
+      // Continue with what data we have
+    }
   }
 
-  if (!templateId) {
-    throw new Error("Template ID is required");
+  // Process subject template
+  const subject = renderVariables(template.subject, context);
+
+  // Process HTML content template
+  let htmlContent = template.htmlContent;
+
+  if (htmlContent) {
+    htmlContent = renderVariables(htmlContent, context);
   }
-
-  // Get template to verify it exists and to get its folder path
-  const template = await getTemplateById(templateId);
-  if (!template) {
-    throw new NotFound("Template not found");
-  }
-
-  const uniqueId = uuidv4();
-  const fileExtension = file.originalname.split(".").pop();
-
-  // Create image folder path within the template's folder
-  const imagesFolder = `${template.s3AssetsPath}/images`;
-
-  // Create a file object with unique filename
-  const imageFile = {
-    ...file,
-    originalname: `${uniqueId}.${fileExtension}`,
-  };
-
-  try {
-    // Upload the file using s3Service to the template's images folder
-    const uploadResult = await s3Service.uploadFile(imageFile, imagesFolder);
-
-    // Get a presigned URL with 24-hour expiry
-    const fileResult = await s3Service.getFile(uploadResult.key, true);
-
-    return {
-      url: fileResult.presignedUrl,
-      key: uploadResult.key,
-      filename: file.originalname,
-      size: file.size,
-      mimetype: file.mimetype,
-      templateId: templateId,
-    };
-  } catch (error) {
-    logger.error("Error uploading template image:", error);
-    throw error;
-  }
-};
-
-/**
- * Transform database row to template object
- * @function transformTemplateFromDb
- * @memberof module:services/template
- * @param {Object} dbTemplate - Template row from database
- * @returns {Object} - Transformed template object
- */
-const transformTemplateFromDb = (dbTemplate) => {
-  if (!dbTemplate) return null;
 
   return {
-    id: dbTemplate.id,
-    name: dbTemplate.name,
-    description: dbTemplate.description,
-    category: dbTemplate.category,
-    mjmlS3Key: dbTemplate.mjml_s3_key,
-    htmlS3Key: dbTemplate.html_s3_key,
-    templateVariables: dbTemplate.template_variables
-      ? typeof dbTemplate.template_variables === "string"
-        ? JSON.parse(dbTemplate.template_variables)
-        : dbTemplate.template_variables
-      : [],
-    s3AssetsPath: dbTemplate.s3_assets_path,
-    hasAttachments: dbTemplate.has_attachments,
-    isActive: dbTemplate.is_active,
-    createdBy: dbTemplate.created_by,
-    updatedBy: dbTemplate.updated_by,
-    createdAt: dbTemplate.created_at,
-    updatedAt: dbTemplate.updated_at,
+    subject,
+    htmlContent,
+    mjmlContent: template.mjmlContent,
+    templateId: template.id,
+    templateName: template.name,
   };
-};
+}
 
 /**
- * Render template with variable substitution
- * @function renderTemplate
- * @memberof module:services/template
- * @param {number} templateId - Template ID
- * @param {Object} variables - Variables to substitute
- * @returns {Promise<string>} - Rendered HTML
+ * Render variables in a string with fallback values
+ * Supports formats like {{ variable }} or {{ variable || "default" }}
+ * @param {string} content - Template content
+ * @param {Object} data - Data for interpolation
+ * @returns {string} - Content with variables replaced
  */
-const renderTemplate = async (templateId, variables = {}) => {
-  const template = await getTemplateById(templateId);
+function renderVariables(content, data) {
+  if (!content) return "";
 
-  if (!template) {
-    throw new NotFound("Template not found");
-  }
+  // Replace all variable patterns
+  return content.replace(/\{\{\s*([a-zA-Z0-9_.]+)(?:\s*\|\|\s*(["'])([^"]*)\2)?\s*\}\}/g, (match, path, _quote, defaultValue) => {
+    // Navigate the object path (supports nested properties like user.profile.name)
+    const value = path.split(".").reduce((obj, key) => (obj && obj[key] !== undefined ? obj[key] : undefined), data);
+
+    // Return the value or default if specified, or empty string
+    return value !== undefined ? value : defaultValue !== undefined ? defaultValue : "";
+  });
+}
+
+/**
+ * Get available subscriber variables for templates
+ * @async
+ * @function getAvailableSubscriberVariables
+ * @returns {Promise<Object>} Object with available variable paths and examples
+ */
+async function getAvailableSubscriberVariables() {
+  let standardFields = {};
+  let metadataFields = {};
 
   try {
-    // Get HTML from S3 using s3Service
-    const fileResult = await s3Service.getFile(template.htmlS3Key);
-    const html = fileResult.content.toString("utf8");
+    // Get table columns dynamically from PostgreSQL information schema
+    const columnQuery = `
+      SELECT 
+        column_name, 
+        data_type, 
+        column_default
+      FROM 
+        information_schema.columns 
+      WHERE 
+        table_name = 'subscribers'
+        AND table_schema = current_schema()
+      ORDER BY 
+        ordinal_position`;
 
-    // Replace variables
-    return processTemplateVariables(html, variables);
+    const { rows: columns } = await db.query(columnQuery);
+
+    // Get real example data for table columns
+    const exampleQuery = `
+      SELECT * FROM subscribers 
+      WHERE is_active = true 
+      ORDER BY created_at DESC 
+      LIMIT 1`;
+
+    const { rows: examples } = await db.query(exampleQuery);
+    const exampleData = examples.length > 0 ? examples[0] : {};
+
+    // Map columns to standardFields with descriptions and examples
+    columns.forEach((column) => {
+      // Skip internal columns or columns we don't want to expose
+      if (["is_deleted", "unsubscribed_at"].includes(column.column_name)) {
+        return;
+      }
+
+      // Convert snake_case to camelCase for the field key
+      const fieldKey = column.column_name.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+
+      // Generate appropriate description based on column name
+      let description = column.column_name
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+
+      if (column.column_name === "id") description = "Subscriber's unique ID";
+      else if (column.column_name === "created_at") description = "Subscription date";
+      else if (column.column_name === "updated_at") description = "Last update date";
+
+      // Get example from real data or create a sensible default
+      let example = exampleData[column.column_name];
+
+      // If no example available, create one based on data type
+      if (example === undefined || example === null) {
+        switch (column.data_type) {
+          case "integer":
+            example = 123;
+            break;
+          case "character varying":
+            example = fieldKey === "email" ? "example@mail.com" : "Example value";
+            break;
+          case "boolean":
+            example = true;
+            break;
+          case "date":
+            example = "2023-05-15";
+            break;
+          case "timestamp with time zone":
+            example = new Date().toISOString();
+            break;
+          default:
+            example = `Example ${fieldKey}`;
+        }
+      }
+
+      // Add field to standardFields
+      standardFields[fieldKey] = {
+        example,
+        description,
+        type: column.data_type,
+      };
+    });
+
+    // Extract all unique metadata keys from subscribers using PostgreSQL's jsonb functions
+    const metadataKeysQuery = `
+      WITH metadata_keys AS (
+        SELECT DISTINCT jsonb_object_keys(metadata) AS key
+        FROM subscribers
+        WHERE metadata IS NOT NULL
+      )
+      SELECT 
+        mk.key,
+        (SELECT metadata->mk.key FROM subscribers WHERE metadata ? mk.key LIMIT 1) AS example
+      FROM 
+        metadata_keys mk
+      ORDER BY 
+        mk.key`;
+
+    const { rows: metadataKeys } = await db.query(metadataKeysQuery);
+
+    // Process metadata keys
+    metadataKeys.forEach((row) => {
+      metadataFields[row.key] = {
+        example: row.example,
+        description: `Custom metadata: ${row.key}`,
+        type: typeof row.example,
+      };
+    });
   } catch (error) {
-    logger.error(`Error rendering template ${templateId}:`, error);
-    throw new Error(`Error rendering template: ${error.message}`);
+    logger.error("Error fetching subscriber variables:", error);
+
+    // Fallback to hardcoded fields in case of error
+    standardFields = {
+      id: { example: 123, description: "Subscriber's unique ID", type: "integer" },
+      email: { example: "example@mail.com", description: "Email address", type: "string" },
+      name: { example: "John Doe", description: "Full name", type: "string" },
+      dateOfBirth: { example: "1985-04-15", description: "Date of birth (YYYY-MM-DD)", type: "date" },
+      isActive: { example: true, description: "Subscription status (active/inactive)", type: "boolean" },
+      createdAt: { example: "2023-05-15T10:30:00Z", description: "Subscription date", type: "timestamp" },
+      updatedAt: { example: "2023-06-20T14:45:00Z", description: "Last update date", type: "timestamp" },
+    };
   }
-};
+
+  // Combine all variables
+  return {
+    standard: standardFields,
+    metadata: metadataFields,
+    usage: {
+      basic: "{{ name }}",
+      withDefault: '{{ name || "Valued Subscriber" }}',
+      metadata: "{{ metadata.preferredLanguage }}",
+    },
+  };
+}
+
+/**
+ * Extract variables from email template
+ * @async
+ * @function getTemplateVariables
+ * @param {number} templateId - Template ID
+ * @returns {Promise<Object>} Object with detected variables
+ * @throws {NotFound} If template doesn't exist
+ */
+async function getTemplateVariables(templateId) {
+  // If templateId provided, get specific template variables
+  if (templateId) {
+    const template = await getEmailTemplateById(templateId, true);
+
+    // Extract variables from template content
+    const variables = template.mjmlContent ? extractVariables(template.mjmlContent) : JSON.parse(template.extracted_variables || "[]");
+
+    return {
+      templateName: template.name,
+      variables,
+      subscriberVariables: await getAvailableSubscriberVariables(),
+    };
+  }
+
+  // If no templateId, just return available subscriber variables
+  return {
+    subscriberVariables: await getAvailableSubscriberVariables(),
+  };
+}
 
 module.exports = {
-  createTemplate,
-  updateTemplate,
-  deleteTemplate,
-  getTemplateById,
-  listTemplates,
-  uploadTemplateImage,
-  renderTemplate,
-  processTemplateVariables,
-  extractTemplateVariables,
+  createEmailTemplate,
+  updateEmailTemplate,
+  getEmailTemplateById,
+  deleteEmailTemplate,
+  getAllEmailTemplates,
+  renderEmailTemplate,
+  getTemplateVariables,
+  getAvailableSubscriberVariables,
+  extractVariables,
 };
