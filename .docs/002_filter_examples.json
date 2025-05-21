@@ -1,0 +1,147 @@
+{
+  "name": "Advanced Filter Examples",
+  "description": "This file demonstrates more complex filter operations with nested conditions",
+  "examples": [
+    {
+      "name": "Complex Customer Segmentation",
+      "description": "Active US-based subscribers who purchased recently or have high engagement",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "is_active",
+            "operator": "eq",
+            "value": true
+          },
+          {
+            "field": "metadata.country",
+            "operator": "eq",
+            "value": "United States"
+          },
+          {
+            "or": [
+              {
+                "field": "metadata.last_purchase_date",
+                "operator": "gte",
+                "value": "2025-03-19T00:00:00Z"
+              },
+              {
+                "and": [
+                  {
+                    "field": "metadata.engagement_score",
+                    "operator": "gte",
+                    "value": 8
+                  },
+                  {
+                    "field": "metadata.email_opens",
+                    "operator": "gte",
+                    "value": 5
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "tags": [2, 5]
+    },
+    {
+      "name": "Target Age Group with Specific Interests",
+      "description": "Subscribers aged 25-45 interested in technology or finance",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "metadata.age",
+            "operator": "gte",
+            "value": 25
+          },
+          {
+            "field": "metadata.age",
+            "operator": "lte",
+            "value": 45
+          },
+          {
+            "or": [
+              {
+                "field": "metadata.interests",
+                "operator": "contains",
+                "value": "technology"
+              },
+              {
+                "field": "metadata.interests",
+                "operator": "contains",
+                "value": "finance"
+              }
+            ]
+          }
+        ]
+      },
+      "tags": []
+    },
+    {
+      "name": "Recent Subscribers Excluding Gmail",
+      "description": "Subscribers from the last 3 months who don't use Gmail",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "subscribed_at",
+            "operator": "gte",
+            "value": "2025-02-19T00:00:00Z"
+          },
+          {
+            "field": "email",
+            "operator": "not_contains",
+            "value": "gmail.com"
+          }
+        ]
+      },
+      "tags": []
+    },
+    {
+      "name": "VIP Customers with Purchase History",
+      "description": "Customers with high lifetime value and multiple purchases",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "metadata.lifetime_value",
+            "operator": "gte",
+            "value": 5000
+          },
+          {
+            "field": "metadata.purchase_count",
+            "operator": "gte",
+            "value": 3
+          },
+          {
+            "field": "metadata.last_purchase_date",
+            "operator": "not_null"
+          }
+        ]
+      },
+      "tags": [7]
+    },
+    {
+      "name": "Churning Customers",
+      "description": "Previously active customers with no recent interaction",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "is_active",
+            "operator": "eq",
+            "value": true
+          },
+          {
+            "field": "metadata.purchase_count",
+            "operator": "gt",
+            "value": 0
+          },
+          {
+            "field": "metadata.last_interaction_date",
+            "operator": "lt",
+            "value": "2025-01-19T00:00:00Z"
+          }
+        ]
+      },
+      "tags": []
+    }
+  ]
+}

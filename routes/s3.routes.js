@@ -53,10 +53,10 @@ router.post(
  * @access Private - requires authentication and storage:read permission
  */
 router.get(
-  "/files/:fileKey",
+  "/files/*fileKey",
   authenticate,
   hasAnyPermission({ resource: "storage", action: "read" }, { resource: "storage", action: "admin" }),
-  validate(getFileSchema),
+  // validate(getFileSchema),
   s3Controller.getFile
 );
 

@@ -1,0 +1,243 @@
+{
+  "name": "Comprehensive Filter Reference",
+  "description": "Complete reference of all filter operations and edge cases",
+  "filter_operators": {
+    "string_operators": [
+      { "operator": "eq", "description": "Equals the specified string value" },
+      { "operator": "neq", "description": "Not equal to the specified string value" },
+      { "operator": "contains", "description": "Contains the specified substring" },
+      { "operator": "not_contains", "description": "Does not contain the specified substring" },
+      { "operator": "starts_with", "description": "Starts with the specified substring" },
+      { "operator": "ends_with", "description": "Ends with the specified substring" },
+      { "operator": "null", "description": "Field is null or undefined" },
+      { "operator": "not_null", "description": "Field is not null and defined" },
+      { "operator": "in", "description": "Matches any value in the provided array" },
+      { "operator": "not_in", "description": "Does not match any value in the provided array" }
+    ],
+    "number_operators": [
+      { "operator": "eq", "description": "Equal to the specified numeric value" },
+      { "operator": "neq", "description": "Not equal to the specified numeric value" },
+      { "operator": "gt", "description": "Greater than the specified numeric value" },
+      { "operator": "gte", "description": "Greater than or equal to the specified numeric value" },
+      { "operator": "lt", "description": "Less than the specified numeric value" },
+      { "operator": "lte", "description": "Less than or equal to the specified numeric value" },
+      { "operator": "between", "description": "Between the two specified numeric values (inclusive)" },
+      { "operator": "null", "description": "Field is null or undefined" },
+      { "operator": "not_null", "description": "Field is not null and defined" }
+    ],
+    "date_operators": [
+      { "operator": "eq", "description": "Equal to the specified date" },
+      { "operator": "neq", "description": "Not equal to the specified date" },
+      { "operator": "gt", "description": "After the specified date" },
+      { "operator": "gte", "description": "On or after the specified date" },
+      { "operator": "lt", "description": "Before the specified date" },
+      { "operator": "lte", "description": "On or before the specified date" },
+      { "operator": "between", "description": "Between the two specified dates (inclusive)" },
+      { "operator": "null", "description": "Field is null or undefined" },
+      { "operator": "not_null", "description": "Field is not null and defined" },
+      { "operator": "extract_day", "description": "Day of month matches the specified value" },
+      { "operator": "extract_month", "description": "Month matches the specified value (1-12)" },
+      { "operator": "extract_year", "description": "Year matches the specified value" }
+    ],
+    "boolean_operators": [
+      { "operator": "eq", "description": "Equal to the specified boolean value" },
+      { "operator": "null", "description": "Field is null or undefined" },
+      { "operator": "not_null", "description": "Field is not null and defined" }
+    ],
+    "array_operators": [
+      { "operator": "contains", "description": "Array contains the specified value" },
+      { "operator": "not_contains", "description": "Array does not contain the specified value" },
+      { "operator": "null", "description": "Field is null or undefined" },
+      { "operator": "not_null", "description": "Field is not null and defined" },
+      { "operator": "empty", "description": "Array is empty" },
+      { "operator": "not_empty", "description": "Array is not empty" },
+      { "operator": "size_eq", "description": "Array size equals the specified value" },
+      { "operator": "size_gt", "description": "Array size is greater than the specified value" },
+      { "operator": "size_lt", "description": "Array size is less than the specified value" }
+    ],
+    "compound_operators": [
+      { "operator": "and", "description": "All conditions must be true" },
+      { "operator": "or", "description": "At least one condition must be true" },
+      { "operator": "not", "description": "The condition must be false" }
+    ]
+  },
+  "examples": [
+    {
+      "name": "All Available Operators Example",
+      "description": "A comprehensive example with all operator types",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "name",
+            "operator": "not_null"
+          },
+          {
+            "field": "email",
+            "operator": "contains",
+            "value": "@"
+          },
+          {
+            "field": "date_of_birth",
+            "operator": "not_null"
+          },
+          {
+            "or": [
+              {
+                "field": "date_of_birth",
+                "operator": "lt",
+                "value": "2000-01-01"
+              },
+              {
+                "field": "date_of_birth",
+                "operator": "extract_month",
+                "value": 5
+              }
+            ]
+          },
+          {
+            "field": "is_active",
+            "operator": "eq",
+            "value": true
+          },
+          {
+            "not": {
+              "field": "unsubscribed_at",
+              "operator": "not_null"
+            }
+          },
+          {
+            "field": "metadata.country",
+            "operator": "in",
+            "value": ["USA", "Canada", "Mexico"]
+          },
+          {
+            "field": "metadata.lifetime_value",
+            "operator": "between",
+            "value": [100, 1000]
+          },
+          {
+            "field": "metadata.interests",
+            "operator": "contains",
+            "value": "technology"
+          },
+          {
+            "or": [
+              {
+                "field": "metadata.purchase_count",
+                "operator": "gt",
+                "value": 5
+              },
+              {
+                "and": [
+                  {
+                    "field": "metadata.email_opens",
+                    "operator": "gte",
+                    "value": 10
+                  },
+                  {
+                    "field": "metadata.email_clicks",
+                    "operator": "gte",
+                    "value": 3
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "tags": [1, 3, 5]
+    },
+    {
+      "name": "Edge Cases Example",
+      "description": "Demonstrates edge cases and special scenarios",
+      "filter_criteria": {
+        "or": [
+          {
+            "field": "email",
+            "operator": "null"
+          },
+          {
+            "field": "email",
+            "operator": "eq",
+            "value": ""
+          },
+          {
+            "field": "metadata",
+            "operator": "null"
+          },
+          {
+            "field": "metadata.interests",
+            "operator": "empty"
+          },
+          {
+            "field": "metadata.interests",
+            "operator": "size_eq",
+            "value": 0
+          },
+          {
+            "field": "date_of_birth",
+            "operator": "eq",
+            "value": "1970-01-01"
+          },
+          {
+            "field": "subscribed_at",
+            "operator": "eq",
+            "value": "2025-05-19T00:00:00Z"
+          }
+        ]
+      },
+      "tags": []
+    },
+    {
+      "name": "Explicit AND/OR Nesting",
+      "description": "Demonstrates explicit nesting of AND/OR conditions",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "is_active",
+            "operator": "eq",
+            "value": true
+          },
+          {
+            "or": [
+              {
+                "field": "metadata.country",
+                "operator": "eq",
+                "value": "USA"
+              },
+              {
+                "field": "metadata.country",
+                "operator": "eq",
+                "value": "Canada"
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "field": "metadata.lifetime_value",
+                "operator": "gte",
+                "value": 1000
+              },
+              {
+                "or": [
+                  {
+                    "field": "metadata.last_purchase_date",
+                    "operator": "gte",
+                    "value": "2025-01-01T00:00:00Z"
+                  },
+                  {
+                    "field": "metadata.engagement_score",
+                    "operator": "gte",
+                    "value": 8
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "tags": [2, 4]
+    }
+  ]
+}

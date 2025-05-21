@@ -181,6 +181,61 @@ async function regenerateRecipients(req, res, next) {
   }
 }
 
+/**
+ * Preview subscribers matching filter criteria
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+async function previewFilterResults(req, res, next) {
+  try {
+    const filterCriteria = req.body.filter_criteria;
+    const queryParams = {
+      page: req.query.page,
+      limit: req.query.limit,
+    };
+
+    // If no filter criteria is provided, return total subscriber count
+    if (!filterCriteria || Object.keys(filterCriteria).length === 0) {
+      const totalCount = await mailingListService.getTotalSubscriberCount();
+      return res.status(200).json({
+        success: true,
+        message: "Total subscriber count retrieved successfully",
+        data: {
+          count: totalCount,
+        },
+      });
+    }
+
+    const result = await mailingListService.previewFilterResults(filterCriteria, queryParams);
+
+    if (result.subscribers) {
+      // If pagination was requested, return subscribers with count
+      res.status(200).json({
+        success: true,
+        message: "Filter preview results retrieved successfully",
+        data: {
+          subscribers: result.subscribers,
+          count: result.count,
+          pagination: result.pagination,
+        },
+      });
+    } else {
+      // If only count was requested
+      res.status(200).json({
+        success: true,
+        message: "Filter preview count retrieved successfully",
+        data: {
+          count: result.count,
+        },
+      });
+    }
+  } catch (error) {
+    logger.error("Error in previewFilterResults controller:", error);
+    next(error);
+  }
+}
+
 module.exports = {
   createMailingList,
   getMailingListById,
@@ -189,4 +244,5 @@ module.exports = {
   deleteMailingList,
   getMailingListRecipients,
   regenerateRecipients,
+  previewFilterResults,
 };

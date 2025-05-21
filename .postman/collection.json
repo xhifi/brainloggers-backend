@@ -704,7 +704,7 @@
     },
     {
       "name": "Mailing Lists",
-      "description": "Mailing list management endpoints with complex filter criteria",
+      "description": "Mailing list management endpoints with advanced nested filter criteria",
       "item": [
         {
           "name": "List All Mailing Lists",
@@ -804,7 +804,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"VIP Subscribers\",\n    \"description\": \"Subscribers with the VIP tag\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1]\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"VIP Subscribers\",\n    \"description\": \"Subscribers with the VIP tag\",\n    \"filter_criteria\": {\n        \"tags\": [1]\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -837,7 +837,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"VIP Tech Enthusiasts\",\n    \"description\": \"Subscribers with both VIP and Tech Enthusiast tags\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1, 2]\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"VIP Tech Enthusiasts\",\n    \"description\": \"Subscribers with both VIP and Tech Enthusiast tags\",\n    \"filter_criteria\": {\n        \"tags\": [1, 2]\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -870,7 +870,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Gmail Users\",\n    \"description\": \"Subscribers with Gmail email addresses\",\n    \"filterCriteria\": {\n        \"email\": {\n            \"contains\": \"@gmail.com\"\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"Gmail Users\",\n    \"description\": \"Subscribers with Gmail email addresses\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"email\",\n            \"operator\": \"contains\",\n            \"value\": \"@gmail.com\"\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -903,7 +903,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Subscribers Named John\",\n    \"description\": \"Subscribers with 'John' in their name\",\n    \"filterCriteria\": {\n        \"name\": {\n            \"contains\": \"John\"\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"Subscribers Named John\",\n    \"description\": \"Subscribers with 'John' in their name\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"name\",\n            \"operator\": \"contains\",\n            \"value\": \"John\"\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -936,7 +936,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Recent Subscribers\",\n    \"description\": \"Subscribers who joined in the last 30 days\",\n    \"filterCriteria\": {\n        \"subscribed_at\": {\n            \"gte\": \"2025-04-14T00:00:00Z\"\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"Recent Subscribers\",\n    \"description\": \"Subscribers who joined in the last 30 days\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"subscribed_at\",\n            \"operator\": \"gte\",\n            \"value\": \"2025-04-14T00:00:00Z\"\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -969,7 +969,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Recent VIPs\",\n    \"description\": \"VIP subscribers who joined in the last 3 months\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1]\n        },\n        \"subscribed_at\": {\n            \"gte\": \"2025-02-14T00:00:00Z\"\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"Recent VIPs\",\n    \"description\": \"VIP subscribers who joined in the last 3 months\",\n    \"filter_criteria\": {\n        \"tags\": [1],\n        \"filter\": {\n            \"field\": \"subscribed_at\",\n            \"operator\": \"gte\",\n            \"value\": \"2025-02-14T00:00:00Z\"\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -1002,7 +1002,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"California Subscribers\",\n    \"description\": \"Subscribers from California\",\n    \"filterCriteria\": {\n        \"metadata\": {\n            \"state\": {\n                \"eq\": \"california\"\n            }\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"California Subscribers\",\n    \"description\": \"Subscribers from California\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"metadata.state\",\n            \"operator\": \"eq\",\n            \"value\": \"california\"\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -1035,7 +1035,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Tech and Sports Fans\",\n    \"description\": \"Subscribers interested in both tech and sports\",\n    \"filterCriteria\": {\n        \"metadata\": {\n            \"interests\": {\n                \"contains\": [\"tech\", \"sports\"]\n            }\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"Tech and Sports Fans\",\n    \"description\": \"Subscribers interested in both tech and sports\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"metadata.interests\",\n            \"operator\": \"contains\",\n            \"value\": [\"tech\", \"sports\"]\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -1068,7 +1068,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"California Tech VIPs\",\n    \"description\": \"VIP subscribers from California interested in tech who joined in 2025\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1, 2]\n        },\n        \"subscribed_at\": {\n            \"gte\": \"2025-01-01T00:00:00Z\"\n        },\n        \"metadata\": {\n            \"state\": {\n                \"eq\": \"california\"\n            },\n            \"interests\": {\n                \"contains\": [\"tech\"]\n            }\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"California Tech VIPs\",\n    \"description\": \"VIP subscribers from California interested in tech who joined in 2025\",\n    \"filter_criteria\": {\n        \"tags\": [1, 2],\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"subscribed_at\",\n                    \"operator\": \"gte\",\n                    \"value\": \"2025-01-01T00:00:00Z\"\n                },\n                {\n                    \"field\": \"metadata.state\",\n                    \"operator\": \"eq\",\n                    \"value\": \"california\"\n                },\n                {\n                    \"field\": \"metadata.interests\",\n                    \"operator\": \"contains\",\n                    \"value\": \"tech\"\n                }\n            ]\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -1101,7 +1101,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Active Subscribers Only\",\n    \"description\": \"Only currently active subscribers\",\n    \"filterCriteria\": {\n        \"is_active\": {\n            \"eq\": true\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"Active Subscribers Only\",\n    \"description\": \"Only currently active subscribers\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"is_active\",\n            \"operator\": \"eq\",\n            \"value\": true\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -1134,7 +1134,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Subscribers with DOB\",\n    \"description\": \"Subscribers who have provided their date of birth\",\n    \"filterCriteria\": {\n        \"date_of_birth\": {\n            \"not_null\": true\n        }\n    }\n}"
+              "raw": "{\n    \"name\": \"Subscribers with DOB\",\n    \"description\": \"Subscribers who have provided their date of birth\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"date_of_birth\",\n            \"operator\": \"not_null\"\n        }\n    }\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists",
@@ -1146,41 +1146,7 @@
           "response": []
         },
         {
-          "name": "Get Mailing List Recipients",
-          "request": {
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
-            },
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{apiBaseUrl}}/mailing-lists/{{mailingListId}}/recipients?page=1&limit=20",
-              "host": ["{{apiBaseUrl}}"],
-              "path": ["mailing-lists", "{{mailingListId}}", "recipients"],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                }
-              ]
-            },
-            "description": "Get recipients for a specific mailing list"
-          },
-          "response": []
-        },
-        {
-          "name": "Regenerate Mailing List Recipients",
+          "name": "Create Mailing List - OR Condition",
           "request": {
             "auth": {
               "type": "bearer",
@@ -1193,13 +1159,164 @@
               ]
             },
             "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{apiBaseUrl}}/mailing-lists/{{mailingListId}}/regenerate",
-              "host": ["{{apiBaseUrl}}"],
-              "path": ["mailing-lists", "{{mailingListId}}", "regenerate"]
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"US or Canadian Subscribers\",\n    \"description\": \"Subscribers from either US or Canada\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"condition\": \"or\",\n            \"rules\": [\n                {\n                    \"field\": \"metadata.country\",\n                    \"operator\": \"eq\",\n                    \"value\": \"USA\"\n                },\n                {\n                    \"field\": \"metadata.country\",\n                    \"operator\": \"eq\",\n                    \"value\": \"Canada\"\n                }\n            ]\n        }\n    }\n}"
             },
-            "description": "Regenerate recipients for a mailing list based on current criteria"
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list using OR condition to filter subscribers from either US or Canada"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - NOT Condition",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Non-Gmail Subscribers\",\n    \"description\": \"Subscribers who don't use Gmail\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"condition\": \"not\",\n            \"rule\": {\n                \"field\": \"email\",\n                \"operator\": \"contains\",\n                \"value\": \"@gmail.com\"\n            }\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list using NOT condition to filter subscribers who don't use Gmail"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Complex Nested Condition",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Complex Filter Demo\",\n    \"description\": \"Demonstrates nested filtering capabilities\",\n    \"filter_criteria\": {\n        \"tags\": [1],\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"is_active\",\n                    \"operator\": \"eq\",\n                    \"value\": true\n                },\n                {\n                    \"condition\": \"or\",\n                    \"rules\": [\n                        {\n                            \"field\": \"metadata.subscription_tier\",\n                            \"operator\": \"eq\",\n                            \"value\": \"premium\"\n                        },\n                        {\n                            \"condition\": \"and\",\n                            \"rules\": [\n                                {\n                                    \"field\": \"metadata.subscription_tier\",\n                                    \"operator\": \"eq\",\n                                    \"value\": \"basic\"\n                                },\n                                {\n                                    \"field\": \"subscribed_at\",\n                                    \"operator\": \"gte\",\n                                    \"value\": \"2025-01-01T00:00:00Z\"\n                                }\n                            ]\n                        }\n                    ]\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list with complex nested conditions to demonstrate advanced filtering"
+          },
+          "response": []
+        },
+        {
+          "name": "Preview Filter Results (Count Only)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"email\",\n            \"operator\": \"contains\",\n            \"value\": \"@gmail.com\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists/preview",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists", "preview"]
+            },
+            "description": "Preview how many subscribers match the given filter criteria (returns count only)"
+          },
+          "response": []
+        },
+        {
+          "name": "Preview Filter Results (With Pagination)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"email\",\n            \"operator\": \"contains\",\n            \"value\": \"@gmail.com\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists/preview?page=1&limit=10",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists", "preview"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Preview subscribers matching the given filter criteria with pagination"
           },
           "response": []
         },
@@ -1225,7 +1342,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"name\": \"Updated Mailing List\",\n    \"description\": \"Updated description\",\n    \"filterCriteria\": {\n        \"tags\": {\n            \"contains\": [1, 3]\n        },\n        \"email\": {\n            \"contains\": \"@gmail.com\"\n        }\n    },\n    \"is_active\": true\n}"
+              "raw": "{\n    \"name\": \"Updated Mailing List\",\n    \"description\": \"Updated description\",\n    \"filter_criteria\": {\n        \"tags\": [1, 3],\n        \"filter\": {\n            \"field\": \"email\",\n            \"operator\": \"contains\",\n            \"value\": \"@gmail.com\"\n        }\n    },\n    \"is_active\": true\n}"
             },
             "url": {
               "raw": "{{apiBaseUrl}}/mailing-lists/{{mailingListId}}",
@@ -1257,6 +1374,468 @@
               "path": ["mailing-lists", "{{mailingListId}}"]
             },
             "description": "Delete a mailing list (soft delete)"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Active Gmail Subscribers",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Active Gmail Subscribers\",\n    \"description\": \"All active subscribers using Gmail who subscribed in the last 6 months\",\n    \"filter_criteria\": {\n        \"tags\": [1, 3],\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"is_active\",\n                    \"operator\": \"eq\",\n                    \"value\": true\n                },\n                {\n                    \"field\": \"email\",\n                    \"operator\": \"contains\",\n                    \"value\": \"gmail.com\"\n                },\n                {\n                    \"field\": \"subscribed_at\",\n                    \"operator\": \"gte\",\n                    \"value\": \"2024-11-19T00:00:00Z\"\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for active Gmail subscribers from the last 6 months"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Inactive Subscribers",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Inactive Subscribers\",\n    \"description\": \"All subscribers who are currently marked as inactive\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"is_active\",\n            \"operator\": \"eq\",\n            \"value\": false\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for all inactive subscribers"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - New York Customers",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"New York Customers\",\n    \"description\": \"Subscribers located in New York\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"metadata.state\",\n            \"operator\": \"eq\",\n            \"value\": \"New York\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for subscribers located in New York"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Missing Name Field",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Missing Name Field\",\n    \"description\": \"Subscribers who haven't provided their name\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"name\",\n            \"operator\": \"null\"\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for subscribers who haven't provided their name"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - High Value Customers",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"High Value Customers\",\n    \"description\": \"Customers with lifetime value over $1000\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"field\": \"metadata.lifetime_value\",\n            \"operator\": \"gt\",\n            \"value\": 1000\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for customers with lifetime value over $1000"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Birthdays Next Month",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Birthdays Next Month\",\n    \"description\": \"Subscribers with birthdays in June\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"date_of_birth\",\n                    \"operator\": \"not_null\"\n                },\n                {\n                    \"field\": \"date_of_birth\",\n                    \"operator\": \"extract_month\",\n                    \"value\": 6\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for subscribers with birthdays in June"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Complex Customer Segmentation",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Complex Customer Segmentation\",\n    \"description\": \"Active US-based subscribers who purchased recently or have high engagement\",\n    \"filter_criteria\": {\n        \"tags\": [2, 5],\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"is_active\",\n                    \"operator\": \"eq\",\n                    \"value\": true\n                },\n                {\n                    \"field\": \"metadata.country\",\n                    \"operator\": \"eq\",\n                    \"value\": \"United States\"\n                },\n                {\n                    \"condition\": \"or\",\n                    \"rules\": [\n                        {\n                            \"field\": \"metadata.last_purchase_date\",\n                            \"operator\": \"gte\",\n                            \"value\": \"2025-03-19T00:00:00Z\"\n                        },\n                        {\n                            \"condition\": \"and\",\n                            \"rules\": [\n                                {\n                                    \"field\": \"metadata.engagement_score\",\n                                    \"operator\": \"gte\",\n                                    \"value\": 8\n                                },\n                                {\n                                    \"field\": \"metadata.email_opens\",\n                                    \"operator\": \"gte\",\n                                    \"value\": 5\n                                }\n                            ]\n                        }\n                    ]\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for active US-based subscribers who purchased recently or have high engagement"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Target Age Group with Interests",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Target Age Group with Specific Interests\",\n    \"description\": \"Subscribers aged 25-45 interested in technology or finance\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"metadata.age\",\n                    \"operator\": \"gte\",\n                    \"value\": 25\n                },\n                {\n                    \"field\": \"metadata.age\",\n                    \"operator\": \"lte\",\n                    \"value\": 45\n                },\n                {\n                    \"condition\": \"or\",\n                    \"rules\": [\n                        {\n                            \"field\": \"metadata.interests\",\n                            \"operator\": \"contains\",\n                            \"value\": \"technology\"\n                        },\n                        {\n                            \"field\": \"metadata.interests\",\n                            \"operator\": \"contains\",\n                            \"value\": \"finance\"\n                        }\n                    ]\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for subscribers aged 25-45 interested in technology or finance"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Recent Subscribers Excluding Gmail",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Recent Subscribers Excluding Gmail\",\n    \"description\": \"Subscribers from the last 3 months who don't use Gmail\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"subscribed_at\",\n                    \"operator\": \"gte\",\n                    \"value\": \"2025-02-19T00:00:00Z\"\n                },\n                {\n                    \"field\": \"email\",\n                    \"operator\": \"not_contains\",\n                    \"value\": \"gmail.com\"\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for subscribers from the last 3 months who don't use Gmail"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - VIP Customers with Purchase History",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"VIP Customers with Purchase History\",\n    \"description\": \"Customers with high lifetime value and multiple purchases\",\n    \"filter_criteria\": {\n        \"tags\": [7],\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"metadata.lifetime_value\",\n                    \"operator\": \"gte\",\n                    \"value\": 5000\n                },\n                {\n                    \"field\": \"metadata.purchase_count\",\n                    \"operator\": \"gte\",\n                    \"value\": 3\n                },\n                {\n                    \"field\": \"metadata.last_purchase_date\",\n                    \"operator\": \"not_null\"\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for customers with high lifetime value and multiple purchases"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Churning Customers",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Churning Customers\",\n    \"description\": \"Previously active customers with no recent interaction\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"is_active\",\n                    \"operator\": \"eq\",\n                    \"value\": true\n                },\n                {\n                    \"field\": \"metadata.purchase_count\",\n                    \"operator\": \"gt\",\n                    \"value\": 0\n                },\n                {\n                    \"field\": \"metadata.last_interaction_date\",\n                    \"operator\": \"lt\",\n                    \"value\": \"2025-01-19T00:00:00Z\"\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list for previously active customers with no recent interaction"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - All Available Operators Example",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"All Available Operators Example\",\n    \"description\": \"A comprehensive example with all operator types\",\n    \"filter_criteria\": {\n        \"tags\": [1, 3, 5],\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"name\",\n                    \"operator\": \"not_null\"\n                },\n                {\n                    \"field\": \"email\",\n                    \"operator\": \"contains\",\n                    \"value\": \"@\"\n                },\n                {\n                    \"field\": \"date_of_birth\",\n                    \"operator\": \"not_null\"\n                },\n                {\n                    \"condition\": \"or\",\n                    \"rules\": [\n                        {\n                            \"field\": \"date_of_birth\",\n                            \"operator\": \"lt\",\n                            \"value\": \"2000-01-01\"\n                        },\n                        {\n                            \"field\": \"date_of_birth\",\n                            \"operator\": \"extract_month\",\n                            \"value\": 5\n                        }\n                    ]\n                },\n                {\n                    \"field\": \"is_active\",\n                    \"operator\": \"eq\",\n                    \"value\": true\n                },\n                {\n                    \"condition\": \"not\",\n                    \"rule\": {\n                        \"field\": \"unsubscribed_at\",\n                        \"operator\": \"not_null\"\n                    }\n                },\n                {\n                    \"field\": \"metadata.country\",\n                    \"operator\": \"in\",\n                    \"value\": [\"USA\", \"Canada\", \"Mexico\"]\n                },\n                {\n                    \"field\": \"metadata.lifetime_value\",\n                    \"operator\": \"between\",\n                    \"value\": [100, 1000]\n                },\n                {\n                    \"field\": \"metadata.interests\",\n                    \"operator\": \"contains\",\n                    \"value\": \"technology\"\n                },\n                {\n                    \"condition\": \"or\",\n                    \"rules\": [\n                        {\n                            \"field\": \"metadata.purchase_count\",\n                            \"operator\": \"gt\",\n                            \"value\": 5\n                        },\n                        {\n                            \"condition\": \"and\",\n                            \"rules\": [\n                                {\n                                    \"field\": \"metadata.email_opens\",\n                                    \"operator\": \"gte\",\n                                    \"value\": 10\n                                },\n                                {\n                                    \"field\": \"metadata.email_clicks\",\n                                    \"operator\": \"gte\",\n                                    \"value\": 3\n                                }\n                            ]\n                        }\n                    ]\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list with all available filter operators as a reference"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Edge Cases Example",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Edge Cases Example\",\n    \"description\": \"Demonstrates edge cases and special scenarios\",\n    \"filter_criteria\": {\n        \"filter\": {\n            \"condition\": \"or\",\n            \"rules\": [\n                {\n                    \"field\": \"email\",\n                    \"operator\": \"null\"\n                },\n                {\n                    \"field\": \"email\",\n                    \"operator\": \"eq\",\n                    \"value\": \"\"\n                },\n                {\n                    \"field\": \"metadata\",\n                    \"operator\": \"null\"\n                },\n                {\n                    \"field\": \"metadata.interests\",\n                    \"operator\": \"empty\"\n                },\n                {\n                    \"field\": \"metadata.interests\",\n                    \"operator\": \"size_eq\",\n                    \"value\": 0\n                },\n                {\n                    \"field\": \"date_of_birth\",\n                    \"operator\": \"eq\",\n                    \"value\": \"1970-01-01\"\n                },\n                {\n                    \"field\": \"subscribed_at\",\n                    \"operator\": \"eq\",\n                    \"value\": \"2025-05-19T00:00:00Z\"\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list that demonstrates edge cases and special scenarios"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Mailing List - Explicit AND/OR Nesting",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Explicit AND/OR Nesting\",\n    \"description\": \"Demonstrates explicit nesting of AND/OR conditions\",\n    \"filter_criteria\": {\n        \"tags\": [2, 4],\n        \"filter\": {\n            \"condition\": \"and\",\n            \"rules\": [\n                {\n                    \"field\": \"is_active\",\n                    \"operator\": \"eq\",\n                    \"value\": true\n                },\n                {\n                    \"condition\": \"or\",\n                    \"rules\": [\n                        {\n                            \"field\": \"metadata.country\",\n                            \"operator\": \"eq\",\n                            \"value\": \"USA\"\n                        },\n                        {\n                            \"field\": \"metadata.country\",\n                            \"operator\": \"eq\",\n                            \"value\": \"Canada\"\n                        }\n                    ]\n                },\n                {\n                    \"condition\": \"and\",\n                    \"rules\": [\n                        {\n                            \"field\": \"metadata.lifetime_value\",\n                            \"operator\": \"gte\",\n                            \"value\": 1000\n                        },\n                        {\n                            \"condition\": \"or\",\n                            \"rules\": [\n                                {\n                                    \"field\": \"metadata.last_purchase_date\",\n                                    \"operator\": \"gte\",\n                                    \"value\": \"2025-01-01T00:00:00Z\"\n                                },\n                                {\n                                    \"field\": \"metadata.engagement_score\",\n                                    \"operator\": \"gte\",\n                                    \"value\": 8\n                                }\n                            ]\n                        }\n                    ]\n                }\n            ]\n        }\n    }\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/mailing-lists",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["mailing-lists"]
+            },
+            "description": "Create a mailing list that demonstrates explicit nesting of AND/OR conditions"
           },
           "response": []
         }

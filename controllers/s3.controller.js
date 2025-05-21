@@ -82,7 +82,8 @@ exports.createFolder = async (req, res, next) => {
  */
 exports.getFile = async (req, res, next) => {
   try {
-    const { fileKey } = req.params;
+    const fileKey = req.params.fileKey.join("/");
+    console.log(fileKey);
     const presigned = req.query.presigned === "true";
 
     const result = await s3Service.getFile(fileKey, presigned);
@@ -97,6 +98,7 @@ exports.getFile = async (req, res, next) => {
       res.setHeader("Content-Type", result.contentType || "application/octet-stream");
       res.setHeader("Content-Length", result.contentLength || 0);
       res.setHeader("Content-Disposition", `inline; filename="${fileKey.split("/").pop()}"`);
+      res.setHeader("x-direct-transfer", "true");
       return res.send(result.content);
     }
   } catch (error) {

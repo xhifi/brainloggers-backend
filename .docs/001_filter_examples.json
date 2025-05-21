@@ -1,0 +1,97 @@
+{
+  "name": "Basic Filter Examples",
+  "description": "This file demonstrates basic filter operations for mailing list creation",
+  "examples": [
+    {
+      "name": "Active Gmail Subscribers",
+      "description": "All active subscribers using Gmail who subscribed in the last 6 months",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "is_active",
+            "operator": "eq",
+            "value": true
+          },
+          {
+            "field": "email",
+            "operator": "contains",
+            "value": "gmail.com"
+          },
+          {
+            "field": "subscribed_at",
+            "operator": "gte",
+            "value": "2024-11-19T00:00:00Z"
+          }
+        ]
+      },
+      "tags": [1, 3]
+    },
+    {
+      "name": "Inactive Subscribers",
+      "description": "All subscribers who are currently marked as inactive",
+      "filter_criteria": {
+        "field": "is_active",
+        "operator": "eq",
+        "value": false
+      },
+      "tags": []
+    },
+    {
+      "name": "New York Customers",
+      "description": "Subscribers located in New York",
+      "filter_criteria": {
+        "field": "metadata.state",
+        "operator": "eq",
+        "value": "New York"
+      },
+      "tags": []
+    },
+    {
+      "name": "Missing Name Field",
+      "description": "Subscribers who haven't provided their name",
+      "filter_criteria": {
+        "field": "name",
+        "operator": "null"
+      },
+      "tags": []
+    },
+    {
+      "name": "Recent Subscribers",
+      "description": "Subscribers who joined in the last 30 days",
+      "filter_criteria": {
+        "field": "subscribed_at",
+        "operator": "gte",
+        "value": "2025-04-19T00:00:00Z"
+      },
+      "tags": []
+    },
+    {
+      "name": "High Value Customers",
+      "description": "Customers with lifetime value over $1000",
+      "filter_criteria": {
+        "field": "metadata.lifetime_value",
+        "operator": "gt",
+        "value": 1000
+      },
+      "tags": []
+    },
+    {
+      "name": "Birthdays Next Month",
+      "description": "Subscribers with birthdays in June",
+      "filter_criteria": {
+        "and": [
+          {
+            "field": "date_of_birth",
+            "operator": "not_null"
+          },
+          {
+            "field": "date_of_birth",
+            "operator": "extract_month",
+            "value": 6
+          }
+        ]
+      },
+      "tags": []
+    }
+  ]
+}

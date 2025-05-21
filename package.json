@@ -10,6 +10,7 @@
     "clean-docs": "rimraf .docs",
     "seed-subscribers": "node --watch --env-file=.env database/seeders/run_mailing_list_seed.js",
     "reset-subscribers": "node --env-file=.env database/seeders/reset_subscribers_seed.js",
+    "migrate-filters": "node --env-file=.env scripts/migrate-mailing-list-filters.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

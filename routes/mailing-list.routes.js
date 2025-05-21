@@ -11,6 +11,7 @@ const {
   listMailingListsSchema,
   getMailingListSchema,
   regenerateRecipientsSchema,
+  previewFilterSchema,
 } = require("../dtos/mailing-list.dto");
 const authenticate = require("../middleware/authenticate");
 const { hasAnyPermission } = require("../middleware/authorize");
@@ -102,6 +103,18 @@ router.post(
   hasAnyPermission({ resource: "mailing-lists", action: "update" }),
   validate(regenerateRecipientsSchema),
   mailingListController.regenerateRecipients
+);
+
+/**
+ * @route POST /api/mailing-lists/preview
+ * @description Preview subscribers matching filter criteria
+ * @access Private (requires mailing-lists:read permission)
+ */
+router.post(
+  "/preview",
+  hasAnyPermission({ resource: "mailing-lists", action: "read" }),
+  validate(previewFilterSchema),
+  mailingListController.previewFilterResults
 );
 
 module.exports = router;
