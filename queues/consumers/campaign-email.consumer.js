@@ -7,6 +7,7 @@ const emailService = require("../../services/email.service");
 const db = require("../../config/db");
 const logger = require("../../services/logger.service");
 const emailTemplateService = require("../../services/email-template.service");
+const subscriberVariablesService = require("../../services/subscriber-variables.service");
 
 // Queue configuration
 const EMAIL_QUEUE = "email_queue";
@@ -101,11 +102,29 @@ async function initCampaignEmailConsumer() {
  */
 async function processEmail(emailJob) {
   const { recipient, sender, replyTo, subject, templateId, templateHtmlContent, templateMjmlContent, data } = emailJob;
+
+  // Enhance data with subscriber variables if recipient ID is available and data is incomplete
+  let enhancedData = data;
+  if (recipient.id && (!data || Object.keys(data).length < 5)) {
+    try {
+      // Get additional subscriber variables if the data seems incomplete
+      const subscriberVariables = await subscriberVariablesService.getSubscriberVariables(recipient.id);
+      enhancedData = {
+        ...data,
+        ...subscriberVariables,
+      };
+      logger.debug(`Enhanced data for recipient ${recipient.id} with ${Object.keys(subscriberVariables).length} variables`);
+    } catch (error) {
+      logger.warn(`Failed to enhance data for recipient ${recipient.id}:`, error);
+      enhancedData = data; // Use original data if enhancement fails
+    }
+  }
+
   // If HTML content is provided, use it directly
   if (templateHtmlContent) {
-    // Render the template with the data
-    const renderedContent = emailTemplateService.renderVariables(templateHtmlContent, data);
-    const renderedSubject = emailTemplateService.renderVariables(subject, data);
+    // Render the template with the enhanced data
+    const renderedContent = emailTemplateService.renderVariables(templateHtmlContent, enhancedData);
+    const renderedSubject = emailTemplateService.renderVariables(subject, enhancedData);
 
     // Add tracking pixel for opens
     const trackingPixel = `<img src="${process.env.API_URL || ""}/track/open?cid=${emailJob.campaignId}&rid=${
@@ -131,12 +150,11 @@ async function processEmail(emailJob) {
 
     return;
   }
-
   // If MJML content is provided, render it
   if (templateMjmlContent) {
     // First interpolate variables in MJML
-    const renderedMjml = emailTemplateService.renderVariables(templateMjmlContent, data);
-    const renderedSubject = emailTemplateService.renderVariables(subject, data);
+    const renderedMjml = emailTemplateService.renderVariables(templateMjmlContent, enhancedData);
+    const renderedSubject = emailTemplateService.renderVariables(subject, enhancedData);
 
     // Convert MJML to HTML
     const { html } = require("mjml")(renderedMjml);
@@ -155,12 +173,11 @@ async function processEmail(emailJob) {
 
     return;
   }
-
   // If neither is provided, fall back to template from DB
   const template = await emailTemplateService.getEmailTemplateById(templateId, true);
 
-  // Render the template with the data
-  const rendered = await emailTemplateService.renderEmailTemplate(templateId, data);
+  // Use the new renderTemplate method with subscriber ID for automatic variable loading
+  const rendered = await emailTemplateService.renderTemplate(template.mjmlContent, recipient.id, enhancedData);
 
   // Send the email
   await emailService.sendEmail({

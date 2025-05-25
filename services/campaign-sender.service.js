@@ -4,10 +4,11 @@
  */
 const db = require("../config/db");
 const logger = require("./logger.service");
-const emailTemplateService = require("./template.service");
+const emailTemplateService = require("./email-template.service");
 const mailingListService = require("./mailing-list.service");
 const queueService = require("./queue.service");
 const subscriberService = require("./subscriber.service");
+const subscriberVariablesService = require("./subscriber-variables.service");
 const { NotFound, BadGateway } = require("../utils/errors");
 
 // Queue name for processing emails
@@ -121,9 +122,20 @@ async function queueCampaignRecipients(campaignId, campaign, template) {
     // Get a batch of recipients
     const recipients = await getRecipientsForCampaign(campaignId, BATCH_SIZE, offset);
 
+    if (recipients.length === 0) {
+      break; // No more recipients
+    }
+
+    // Bulk load variables for all recipients in this batch
+    const subscriberIds = recipients.map((r) => r.id);
+    const subscriberVariablesMap = await subscriberVariablesService.getVariablesForSubscribers(subscriberIds);
+
     // Process each recipient in the batch
     for (const recipient of recipients) {
-      await queueEmailForRecipient(recipient, campaign, template);
+      // Get variables for this specific subscriber
+      const subscriberVariables = subscriberVariablesMap[recipient.id] || {};
+
+      await queueEmailForRecipient(recipient, campaign, template, subscriberVariables);
     }
 
     // Update counters
@@ -146,15 +158,39 @@ async function queueCampaignRecipients(campaignId, campaign, template) {
  * @param {Object} recipient - Recipient data
  * @param {Object} campaign - Campaign data
  * @param {Object} template - Email template data
+ * @param {Object} subscriberVariables - Pre-loaded subscriber variables from subscriber_variables table
  * @returns {Promise<void>}
  */
-async function queueEmailForRecipient(recipient, campaign, template) {
+async function queueEmailForRecipient(recipient, campaign, template, subscriberVariables = {}) {
   try {
-    // Combine template variables from campaign with recipient data for personalization
+    // Prepare comprehensive data context using the new subscriber variables system
     const data = {
-      ...recipient,
-      metadata: recipient.metadata || {},
+      // Standard subscriber fields
+      id: recipient.id,
+      email: recipient.email,
+      name: recipient.name,
+      first_name: recipient.first_name,
+      last_name: recipient.last_name,
+      phone: recipient.phone,
+      created_at: recipient.created_at,
+      updated_at: recipient.updated_at,
+      is_active: recipient.is_active,
+
+      // Pre-loaded variables from subscriber_variables table (includes metadata)
+      ...subscriberVariables,
+
+      // Campaign template variables (override subscriber variables if conflicts)
       ...campaign.template_variables,
+
+      // Campaign-specific variables
+      campaign_name: campaign.name,
+      campaign_id: campaign.id,
+      sent_date: new Date().toISOString(),
+      unsubscribe_url: `${process.env.API_URL || ""}/unsubscribe?token=${Buffer.from(`${campaign.id}:${recipient.id}`).toString("base64")}`,
+      company_name: process.env.COMPANY_NAME || "Our Company",
+
+      // Deprecated: Keep for backward compatibility (prefer individual fields)
+      metadata: recipient.metadata || {},
     };
 
     // Create email job

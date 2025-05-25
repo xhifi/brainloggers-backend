@@ -18,12 +18,12 @@ DROP TABLE IF EXISTS email_campaigns;
 DROP TABLE IF EXISTS email_templates;
 DROP TABLE IF EXISTS mailing_lists;
 DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS subscriber_variables;
 DROP TABLE IF EXISTS subscribers;
 DROP TABLE IF EXISTS permissions;
 -- Finally drop the base tables
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS roles;
-DROP TABLE IF EXISTS email_queue;
 
 -- =====================================================
 -- USER MANAGEMENT TABLES
@@ -141,6 +141,13 @@ CREATE TABLE subscribers (
   unsubscribed_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Subscriber Variables Table (Simplified - stores only variable definitions)
+CREATE TABLE subscriber_variables (
+    variable_name VARCHAR(255) PRIMARY KEY,
+    data_type VARCHAR(50) NOT NULL DEFAULT 'string' 
+        CHECK (data_type IN ('string', 'number', 'boolean', 'date', 'email', 'url', 'json'))
 );
 
 -- Mailing Lists
@@ -302,9 +309,6 @@ CREATE TABLE IF NOT EXISTS blog_post_slug_redirects (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-
-
-
 -- --- Indexes for Performance ---
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_verification_token ON users(verification_token);
@@ -353,13 +357,15 @@ CREATE INDEX idx_email_analytics_event_time ON email_analytics(event_time);
 
 -- Create indexes for tagging system
 CREATE INDEX idx_tags_name ON tags(name);
-CREATE INDEX idx_tags_type ON tags(type);
 CREATE INDEX idx_subscriber_tags_subscriber_id ON subscriber_tags(subscriber_id);
 CREATE INDEX idx_subscriber_tags_tag_id ON subscriber_tags(tag_id);
 
 -- Create index for blog_post_slug_redirects
 CREATE INDEX IF NOT EXISTS idx_blog_post_slug_redirects_old_slug ON blog_post_slug_redirects(old_slug);
 CREATE INDEX IF NOT EXISTS idx_blog_post_slug_redirects_post_id ON blog_post_slug_redirects(post_id);
+
+-- Create index for subscriber variables
+CREATE INDEX idx_subscriber_variables_data_type ON subscriber_variables(data_type);
 
 -- --- Trigger function to automatically update 'updated_at' column ---
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -387,6 +393,105 @@ CREATE TRIGGER update_mailing_lists_updated_at BEFORE UPDATE ON mailing_lists FO
 CREATE TRIGGER update_email_campaigns_updated_at BEFORE UPDATE ON email_campaigns FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_tags_updated_at BEFORE UPDATE ON tags FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- =====================================================
+-- SUBSCRIBER VARIABLES SYSTEM
+-- =====================================================
+
+-- Function to extract variable definitions from subscriber records
+-- This function analyzes subscriber data and ensures variable definitions exist
+CREATE OR REPLACE FUNCTION extract_subscriber_variable_definitions(subscriber_row subscribers)
+RETURNS VOID AS $$
+DECLARE
+    metadata_key TEXT;
+    metadata_value TEXT;
+    inferred_type TEXT;
+BEGIN
+    -- Insert standard field variable definitions (ensure they exist)
+    INSERT INTO subscriber_variables (variable_name, data_type) VALUES
+        ('id', 'number'),
+        ('email', 'email'),
+        ('name', 'string'),
+        ('date_of_birth', 'date'),
+        ('subscribed_at', 'date'),
+        ('unsubscribed_at', 'date'),
+        ('created_at', 'date'),
+        ('updated_at', 'date'),
+        ('is_active', 'boolean')
+    ON CONFLICT (variable_name) DO NOTHING;
+    
+    -- Extract metadata variable definitions (if metadata exists and is valid JSON)
+    IF subscriber_row.metadata IS NOT NULL AND subscriber_row.metadata != '{}' THEN
+        -- Loop through each key-value pair in the metadata JSON to define variables
+        FOR metadata_key, metadata_value IN 
+            SELECT key, value::TEXT 
+            FROM jsonb_each_text(subscriber_row.metadata::jsonb)
+        LOOP
+            -- Infer data type based on value
+            inferred_type := 'string'; -- default
+            
+            -- Check if it's a number
+            IF metadata_value ~ '^[+-]?[0-9]+\.?[0-9]*$' THEN
+                inferred_type := 'number';
+            -- Check if it's a boolean
+            ELSIF LOWER(metadata_value) IN ('true', 'false') THEN
+                inferred_type := 'boolean';
+            -- Check if it's a date (basic ISO format check)
+            ELSIF metadata_value ~ '^\d{4}-\d{2}-\d{2}' THEN
+                inferred_type := 'date';
+            -- Check if it's an email
+            ELSIF metadata_value ~ '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$' THEN
+                inferred_type := 'email';
+            -- Check if it's a URL
+            ELSIF metadata_value ~ '^https?://' THEN
+                inferred_type := 'url';
+            -- Check if it's JSON (starts with { or [)
+            ELSIF metadata_value ~ '^[\{\[]' THEN
+                inferred_type := 'json';
+            END IF;
+            
+            -- Insert the metadata variable definition (prefix with 'metadata.')
+            INSERT INTO subscriber_variables (variable_name, data_type)
+            VALUES ('metadata.' || metadata_key, inferred_type)
+            ON CONFLICT (variable_name) 
+            DO UPDATE SET 
+                data_type = CASE 
+                    -- If current type is more specific, keep it
+                    WHEN subscriber_variables.data_type != 'string' THEN subscriber_variables.data_type
+                    -- Otherwise update with the inferred type
+                    ELSE EXCLUDED.data_type
+                END;
+        END LOOP;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger function for INSERT/UPDATE on subscribers
+-- This ensures new variable types are captured when subscribers are added/updated
+CREATE OR REPLACE FUNCTION trigger_extract_subscriber_variable_definitions()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Call the extraction function with the new row to update variable definitions
+    PERFORM extract_subscriber_variable_definitions(NEW);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers to automatically capture new variable definitions
+CREATE TRIGGER trigger_subscriber_variable_definitions_insert
+    AFTER INSERT ON subscribers
+    FOR EACH ROW
+    EXECUTE FUNCTION trigger_extract_subscriber_variable_definitions();
+
+CREATE TRIGGER trigger_subscriber_variable_definitions_update
+    AFTER UPDATE ON subscribers
+    FOR EACH ROW
+    EXECUTE FUNCTION trigger_extract_subscriber_variable_definitions();
+
+-- Add comments to document the subscriber variables table purpose
+COMMENT ON TABLE subscriber_variables IS 'Defines available template variables and their data types for email templates';
+COMMENT ON COLUMN subscriber_variables.variable_name IS 'Unique variable name used in email templates (e.g., "email", "metadata.last_ordered")';
+COMMENT ON COLUMN subscriber_variables.data_type IS 'Data type of the variable for validation and formatting';
+
 
 -- --- Optional: Seed initial data (uncomment and modify if needed) ---
 -- Insert Roles
@@ -412,7 +517,7 @@ INSERT INTO permissions (resource, action, description) VALUES
     ('storage', 'write', 'Can upload and update files in S3 storage'),
     ('storage', 'delete', 'Can delete files and folders in S3 storage'),
     ('storage', 'list', 'Can list files and folders in S3 storage'),
-    ('storage', 'admin', 'Has full control over S3 storage operations')
+    ('storage', 'admin', 'Has full control over S3 storage operations'),
     -- subscription permissions
     ('subscriptions', 'read', 'Can view subscription lists and details'),
     ('subscriptions', 'create', 'Can add new subscribers'),
@@ -448,7 +553,7 @@ INSERT INTO permissions (resource, action, description) VALUES
     ('campaigns', 'schedule', 'Can schedule campaigns for sending'),
     ('campaigns', 'send', 'Can send campaigns immediately'),
     ('campaigns', 'cancel', 'Can cancel scheduled campaigns'),
-    ('campaigns', 'analytics', 'Can view campaign analytics')
+    ('campaigns', 'analytics', 'Can view campaign analytics'),
     -- Add blog permissions
     ('blog', 'create', 'Create blog post drafts'),
     ('blog', 'read', 'Read blog posts'),
@@ -456,13 +561,24 @@ INSERT INTO permissions (resource, action, description) VALUES
     ('blog', 'delete', 'Delete blog posts'),
     ('blog', 'publish', 'Publish blog posts'),
     ('blog', 'comment', 'Comment on blog posts'),
-    ('blog', 'comment_moderate', 'Moderate blog comments');
+    ('blog', 'comment_moderate', 'Moderate blog comments')
   -- Add permissions for other resources like posts, settings etc.
   -- ('posts', 'create', 'Can create posts'),
   -- ('posts', 'publish', 'Can publish posts')
 ON CONFLICT (resource, action) DO NOTHING; -- Use new unique constraint
 
-
+-- Ensure standard variables are included
+INSERT INTO subscriber_variables (variable_name, data_type) VALUES
+    ('id', 'number'),
+    ('email', 'email'),
+    ('name', 'string'),
+    ('date_of_birth', 'date'),
+    ('subscribed_at', 'date'),
+    ('unsubscribed_at', 'date'),
+    ('created_at', 'date'),
+    ('updated_at', 'date'),
+    ('is_active', 'boolean')
+ON CONFLICT (variable_name) DO NOTHING;
 
 -- Assign permissions to roles (Example: Admin gets all defined permissions)
 -- Note: This assumes permissions and roles exist. Run this after inserting them.
@@ -471,9 +587,9 @@ DECLARE
     admin_role_id int;
 BEGIN
     SELECT id INTO admin_role_id FROM roles WHERE name = 'admin';
-    IF admin_role_id IS NOpermissions (role_id, permission_id)
-        SELECT admin_rolT NULL THEN
-        INSERT INTO role_e_id, p.id
+    IF admin_role_id IS NOT NULL THEN
+        INSERT INTO role_permissions (role_id, permission_id)
+        SELECT admin_role_id, p.id
         FROM permissions p
         ON CONFLICT (role_id, permission_id) DO NOTHING;
     ELSE

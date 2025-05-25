@@ -73,32 +73,66 @@ const getEmailTemplateSchema = {
 };
 
 /**
- * @typedef {Object} RenderEmailTemplateSchema
- * @property {number} templateId - ID of the email template
- * @property {number} [subscriberId] - ID of the subscriber (optional)
- * @property {Object} [subscriberData] - Subscriber data for variable interpolation (optional)
- * @property {Object} [customData] - Custom data for variable interpolation (optional)
+ * @typedef {Object} ListEmailTemplatesSchema
+ * @property {number} [page] - Page number for pagination
+ * @property {number} [limit] - Number of items per page
+ * @property {string} [search] - Search term for filtering templates
+ * @property {string} [category] - Category of templates to filter
+ * @property {boolean} [isActive] - Filter by active status
+ * @property {string} [sortBy] - Field to sort by
+ * @property {string} [sortOrder] - Sort order (asc or desc)
  */
-const renderEmailTemplateSchema = {
+const listEmailTemplatesSchema = {
+  query: z
+    .object({
+      page: z.string().regex(/^\d+$/).transform(Number).optional(),
+      limit: z.string().regex(/^\d+$/).transform(Number).optional(),
+      search: z.string().optional(),
+      category: z.string().optional(),
+      isActive: z
+        .enum(["true", "false"])
+        .transform((val) => val === "true")
+        .optional(),
+      sortBy: z.enum(["id", "name", "category", "created_at", "updated_at"]).optional(),
+      sortOrder: z.enum(["asc", "desc"]).optional(),
+    })
+    .optional(),
+};
+
+/**
+ * @typedef {Object} RenderTemplateSchema
+ * @property {string} mjmlContent - Raw MJML content with Liquid variables
+ * @property {Object} [context] - Context object with variable values for rendering
+ */
+const renderTemplateSchema = {
   body: z.object({
-    templateId: z.number().int().positive("Template ID must be a positive integer"),
-    subscriberId: z.number().int().positive("Subscriber ID must be a positive integer").optional(),
-    subscriberData: z.record(z.any()).optional(),
-    customData: z.record(z.any()).optional(),
+    mjmlContent: z.string().min(1, "MJML content is required"),
+    context: z.record(z.any()).optional(),
   }),
 };
 
 /**
- * @typedef {Object} ListTemplateVariablesSchema
- * @property {number} id - ID of the email template to get variables from (optional)
+ * @typedef {Object} PreviewTemplateSchema
+ * @property {number} id - ID of the template to preview
+ * @property {Object} [sampleData] - Sample data for variable interpolation
  */
-const listTemplateVariablesSchema = {
+const previewTemplateSchema = {
   params: z.object({
     id: z
       .string()
       .regex(/^\d+$/, "ID must be a number")
-      .transform((val) => parseInt(val, 10))
-      .optional(),
+      .transform((val) => parseInt(val, 10)),
+  }),
+  body: z.record(z.any()).optional(),
+};
+
+/**
+ * @typedef {Object} ExtractVariablesSchema
+ * @property {string} mjmlContent - Raw MJML content to extract variables from
+ */
+const extractVariablesSchema = {
+  body: z.object({
+    mjmlContent: z.string().min(1, "MJML content is required"),
   }),
 };
 
@@ -106,6 +140,8 @@ module.exports = {
   createEmailTemplateSchema,
   updateEmailTemplateSchema,
   getEmailTemplateSchema,
-  renderEmailTemplateSchema,
-  listTemplateVariablesSchema,
+  listEmailTemplatesSchema,
+  renderTemplateSchema,
+  previewTemplateSchema,
+  extractVariablesSchema,
 };

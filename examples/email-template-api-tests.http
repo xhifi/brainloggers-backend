@@ -1,0 +1,83 @@
+# Email Templates API Tests
+
+### Set authentication token
+@token = your-auth-token-here
+
+### List email templates
+GET http://localhost:3000/api/email-templates/v2
+Authorization: Bearer {{token}}
+
+### Extract variables from MJML content
+POST http://localhost:3000/api/email-templates/v2/extract-variables
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "mjmlContent": "<mjml><mj-body><mj-section><mj-column><mj-text>Hello {{name}}, your email is {{email}} and you're from {{metadata.city}}</mj-text></mj-column></mj-section></mj-body></mjml>"
+}
+
+### Create a new email template
+POST http://localhost:3000/api/email-templates/v2
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "Welcome Email",
+  "subject": "Welcome to Our Platform",
+  "description": "Welcome email for new subscribers",
+  "category": "Onboarding",
+  "mjmlContent": "<mjml><mj-body><mj-section><mj-column><mj-text>Hello {{name}}, welcome to our platform!</mj-text></mj-column></mj-section></mj-body></mjml>"
+}
+
+### Get email template by ID
+GET http://localhost:3000/api/email-templates/v2/1?includeContent=true
+Authorization: Bearer {{token}}
+
+### Preview email template
+POST http://localhost:3000/api/email-templates/v2/1/preview
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "metadata": {
+    "city": "New York"
+  },
+  "recommended_articles": [
+    {"title": "Getting Started", "url": "https://example.com/getting-started"},
+    {"title": "Advanced Features", "url": "https://example.com/advanced"}
+  ],
+  "unsubscribe_url": "https://example.com/unsubscribe"
+}
+
+### Preview raw MJML with sample data
+POST http://localhost:3000/api/email-templates/v2/preview-raw
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "mjmlContent": "<mjml><mj-body><mj-section><mj-column><mj-text>Hello {{name}}, your email is {{email}}</mj-text></mj-column></mj-section></mj-body></mjml>",
+  "context": {
+    "name": "Test User",
+    "email": "test@example.com"
+  }
+}
+
+### Get template variables
+GET http://localhost:3000/api/email-templates/v2/1/variables
+Authorization: Bearer {{token}}
+
+### Update email template
+PUT http://localhost:3000/api/email-templates/v2/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "subject": "Updated: Welcome to Our Platform",
+  "description": "Updated welcome email for new subscribers"
+}
+
+### Delete email template
+DELETE http://localhost:3000/api/email-templates/v2/1
+Authorization: Bearer {{token}}

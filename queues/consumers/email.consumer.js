@@ -1,14 +1,15 @@
 const config = require("../../config");
 const transporter = require("../../config/aws"); // Nodemailer SES transport or fallback
 const logger = require("../../services/logger.service");
-// Consider using a template engine like EJS or Handlebars for real emails
+// Consider using a template engine like EJS or Liquid for real emails
 // const ejs = require('ejs');
+// const { Liquid } = require('liquidjs');
 // const path = require('path');
 // const fs = require('fs');
 
 const MAX_RETRIES = 3; // Max times to attempt sending a failed email
 
-// Basic templating function (replace with EJS/Handlebars)
+// Basic templating function (replace with EJS/Liquid)
 const renderTemplate = (type, context) => {
   let subject = "Notification";
   let htmlContent = `<p>Notification details: ${JSON.stringify(context)}</p>`;
@@ -78,7 +79,7 @@ const processEmailTask = async (msgData) => {
   logger.info(`[Email Worker] Processing task type: ${msgData.type} for ${msgData.to}`);
 
   try {
-    // Render email content using a basic templater or EJS/Handlebars
+    // Render email content using a basic templater or EJS/Liquid
     const { subject, html, text } = renderTemplate(msgData.type, msgData.context || {});
 
     const mailOptions = {

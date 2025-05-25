@@ -2427,6 +2427,126 @@
       ]
     },
     {
+      "name": "Email Templates",
+      "description": "Email template management and variable analysis endpoints",
+      "item": [
+        {
+          "name": "Get Available Variables",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/email-templates/variables/available",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["api", "email-templates", "variables", "available"]
+            },
+            "description": "Get all available template variables with usage statistics and categorization. Returns system variables, subscriber properties, and custom fields that can be used in email templates."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{apiBaseUrl}}/api/email-templates/variables/available",
+                  "host": ["{{apiBaseUrl}}"],
+                  "path": ["api", "email-templates", "variables", "available"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"system\": [\n      {\n        \"name\": \"unsubscribe_url\",\n        \"description\": \"URL for unsubscribing from mailing list\",\n        \"category\": \"system\",\n        \"example\": \"https://app.example.com/unsubscribe/abc123\",\n        \"usageCount\": 15\n      }\n    ],\n    \"subscriber\": [\n      {\n        \"name\": \"name\",\n        \"description\": \"Subscriber's full name\",\n        \"category\": \"subscriber\",\n        \"example\": \"John Doe\",\n        \"usageCount\": 42\n      },\n      {\n        \"name\": \"email\",\n        \"description\": \"Subscriber's email address\",\n        \"category\": \"subscriber\",\n        \"example\": \"john@example.com\",\n        \"usageCount\": 38\n      }\n    ],\n    \"custom\": [\n      {\n        \"name\": \"company\",\n        \"description\": \"Subscriber's company name\",\n        \"category\": \"custom\",\n        \"example\": \"Acme Corp\",\n        \"usageCount\": 12\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Analyze Template Variables",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateId\": {{templateId}},\n  \"subscriberIds\": [{{subscriberId1}}, {{subscriberId2}}]\n}"
+            },
+            "url": {
+              "raw": "{{apiBaseUrl}}/api/email-templates/variables/analyze",
+              "host": ["{{apiBaseUrl}}"],
+              "path": ["api", "email-templates", "variables", "analyze"]
+            },
+            "description": "Analyze template variable availability for specific subscribers. Checks which variables are available for given subscribers and identifies any missing data that would prevent successful template rendering."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"templateId\": 1,\n  \"subscriberIds\": [1, 2]\n}"
+                },
+                "url": {
+                  "raw": "{{apiBaseUrl}}/api/email-templates/variables/analyze",
+                  "host": ["{{apiBaseUrl}}"],
+                  "path": ["api", "email-templates", "variables", "analyze"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"templateId\": 1,\n    \"templateVariables\": [\"name\", \"email\", \"company\", \"unsubscribe_url\"],\n    \"subscribers\": [\n      {\n        \"id\": 1,\n        \"email\": \"john@example.com\",\n        \"availableVariables\": [\"name\", \"email\", \"company\", \"unsubscribe_url\"],\n        \"missingVariables\": [],\n        \"canRender\": true\n      },\n      {\n        \"id\": 2,\n        \"email\": \"jane@example.com\",\n        \"availableVariables\": [\"name\", \"email\", \"unsubscribe_url\"],\n        \"missingVariables\": [\"company\"],\n        \"canRender\": false\n      }\n    ],\n    \"summary\": {\n      \"totalSubscribers\": 2,\n      \"canRenderCount\": 1,\n      \"missingDataCount\": 1,\n      \"commonMissingVariables\": [\"company\"]\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "System",
       "description": "System-related endpoints",
       "item": [
